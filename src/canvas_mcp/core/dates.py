@@ -161,15 +161,19 @@ def format_date_smart(
 
         if days == 0:
             # Same day
-            hours = delta.seconds // 3600
+            total_seconds = int(delta.total_seconds())
+            abs_seconds = abs(total_seconds)
+            if abs_seconds < 60:
+                return "now"
+            hours = abs_seconds // 3600
             if hours == 0:
-                minutes = delta.seconds // 60
-                if minutes <= 0:
-                    return "now"
-                return f"in {minutes}m"
-            if delta.total_seconds() > 0:
+                minutes = abs_seconds // 60
+                if total_seconds > 0:
+                    return f"in {minutes}m"
+                return f"{minutes}m ago"
+            if total_seconds > 0:
                 return f"in {hours}h"
-            return f"{abs(hours)}h ago"
+            return f"{hours}h ago"
         elif days == 1:
             return "tomorrow"
         elif days == -1:
