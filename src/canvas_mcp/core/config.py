@@ -146,6 +146,7 @@ def validate_config() -> bool:
             f"defaulting to 'all' (got '{config.user_type}')",
             file=sys.stderr
         )
+        config.user_type = "all"  # Actually apply the default
 
     for env_name, env_value in _INVALID_INT_ENV_VARS.items():
         print(

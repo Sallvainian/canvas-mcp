@@ -556,10 +556,12 @@ def register_other_tools(mcp: FastMCP):
                     role_str_full = str(role_value)
                     abbrev = role_abbrev_map.get(role_str_full)
                     if not abbrev:
-                        # Fallback: use the first character, uppercased, if available
-                        abbrev = role_str_full[0].upper() if role_str_full else "S"
+                        # Fallback: use first 2 characters to reduce ambiguity
+                        normalized = role_str_full.strip()
+                        abbrev = normalized[:2].upper() if normalized else "S"
                     roles.append(abbrev)
-                role_str = "".join(set(roles)) if roles else "S"
+                # Use sorted unique roles with delimiter for deterministic output
+                role_str = "/".join(sorted(set(roles))) if roles else "S"
                 items.append(f"{user_id}|{name}|{role_str}")
 
             body = "\n".join(items)
