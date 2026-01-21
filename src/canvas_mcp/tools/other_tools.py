@@ -537,11 +537,28 @@ def register_other_tools(mcp: FastMCP):
             # Token-efficient format: pipe-delimited
             header = format_header("users", course_display, v)
             items = []
+            # Map common Canvas enrollment roles to compact, less ambiguous abbreviations
+            role_abbrev_map = {
+                "StudentEnrollment": "S",
+                "TeacherEnrollment": "T",
+                "TaEnrollment": "TA",
+                "ObserverEnrollment": "O",
+                "DesignerEnrollment": "D",
+            }
             for user in users:
                 user_id = user.get("id")
                 name = user.get("name", "Unknown")
                 enrollments = user.get("enrollments", [])
-                roles = [e.get("role", "S")[0] for e in enrollments]  # First letter of role
+                roles = []
+                for e in enrollments:
+                    role_value = e.get("role") or "StudentEnrollment"
+                    # Ensure we have a string to work with
+                    role_str_full = str(role_value)
+                    abbrev = role_abbrev_map.get(role_str_full)
+                    if not abbrev:
+                        # Fallback: use the first character, uppercased, if available
+                        abbrev = role_str_full[0].upper() if role_str_full else "S"
+                    roles.append(abbrev)
                 role_str = "".join(set(roles)) if roles else "S"
                 items.append(f"{user_id}|{name}|{role_str}")
 
