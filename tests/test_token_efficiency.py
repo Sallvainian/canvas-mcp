@@ -4,7 +4,6 @@ These tests measure token consumption of tool responses to verify
 the compact format achieves expected token savings.
 """
 
-import pytest
 
 
 def estimate_tokens(text: str) -> int:
