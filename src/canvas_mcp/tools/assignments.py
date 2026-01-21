@@ -750,7 +750,7 @@ def register_assignment_tools(mcp: FastMCP):
         if summary_only or v == Verbosity.COMPACT:
             header = format_header("analytics", f"{assignment_name}|{course_display}", Verbosity.COMPACT)
             stats_line = format_stats({
-                "submitted": f"{submitted}/{total_students}",
+                "submitted": submitted,
                 "missing": missing,
                 "average": avg_score if scores else 0,
                 "median": median_score if scores else 0,
