@@ -27,19 +27,6 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
-def count_tokens_tiktoken(text: str) -> int:
-    """Count tokens using tiktoken if available.
-
-    Falls back to estimate_tokens if tiktoken not installed.
-    """
-    try:
-        import tiktoken
-        encoder = tiktoken.encoding_for_model("gpt-4")
-        return len(encoder.encode(text))
-    except ImportError:
-        return estimate_tokens(text)
-
-
 class TestTokenEstimation:
     """Test token estimation utilities."""
 
