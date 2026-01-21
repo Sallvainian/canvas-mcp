@@ -270,7 +270,7 @@ Reduce token overhead by filtering tools based on your role:
 
 ```bash
 # In your .env file
-CANVAS_MCP_USER_TYPE=educator  # Removes student/developer tools (saves ~2K tokens)
+CANVAS_MCP_USER_TYPE=educator  # Removes student/developer tools (saves ~1,600–3,200 tokens)
 ```
 
 | User Type | Tools Available | Use Case |
