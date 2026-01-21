@@ -155,38 +155,41 @@ def format_date_smart(
         # Relative time format
         now = datetime.datetime.now(datetime.timezone.utc)
         delta = dt - now
+        total_seconds = int(delta.total_seconds())
+        abs_seconds = abs(total_seconds)
 
-        # Convert to total days
-        days = delta.days
-
-        if days == 0:
-            # Same day
-            total_seconds = int(delta.total_seconds())
-            abs_seconds = abs(total_seconds)
+        # Within 24 hours (86400 seconds) - handles same-day correctly
+        # Note: We use total_seconds instead of delta.days because Python
+        # represents negative deltas < 24h as -1 day + positive seconds,
+        # which would incorrectly trigger "yesterday" for times like "2h ago"
+        if abs_seconds < 86400:
             if abs_seconds < 60:
                 return "now"
             hours = abs_seconds // 3600
             if hours == 0:
                 minutes = abs_seconds // 60
-                if total_seconds > 0:
-                    return f"in {minutes}m"
-                return f"{minutes}m ago"
-            if total_seconds > 0:
-                return f"in {hours}h"
-            return f"{hours}h ago"
-        elif days == 1:
-            return "tomorrow"
-        elif days == -1:
-            return "yesterday"
-        elif 0 < days <= 7:
-            return f"in {days} days"
-        elif -7 <= days < 0:
-            return f"{abs(days)} days ago"
+                return f"in {minutes}m" if total_seconds > 0 else f"{minutes}m ago"
+            return f"in {hours}h" if total_seconds > 0 else f"{hours}h ago"
+
+        # Beyond 24 hours - calculate days from total seconds
+        days = abs_seconds // 86400
+        if total_seconds > 0:
+            # Future dates
+            if days == 1:
+                return "tomorrow"
+            elif days <= 7:
+                return f"in {days} days"
         else:
-            # Fall back to compact for dates more than a week away
-            if dt.year != now.year:
-                return dt.strftime('%b %d %Y')
-            return dt.strftime('%b %d')
+            # Past dates
+            if days == 1:
+                return "yesterday"
+            elif days <= 7:
+                return f"{days} days ago"
+
+        # Fall back to compact for dates more than a week away
+        if dt.year != now.year:
+            return dt.strftime('%b %d %Y')
+        return dt.strftime('%b %d')
 
     return date_str  # Fallback
 

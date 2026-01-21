@@ -22,7 +22,10 @@ class Verbosity(Enum):
     VERBOSE = "verbose"
 
 
-# Global verbosity setting, initialized from config
+# Global verbosity level - cached on first access for performance.
+# Set CANVAS_MCP_VERBOSITY environment variable before server startup.
+# To change verbosity at runtime, use set_verbosity() function.
+# Note: Changes to the env var after first access will not take effect.
 _verbosity: Verbosity | None = None
 
 
