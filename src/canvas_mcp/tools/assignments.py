@@ -12,9 +12,6 @@ from ..core.dates import format_date, format_date_smart, format_datetime_compact
 from ..core.logging import log_error
 from ..core.response_formatter import (
     Verbosity,
-    format_boolean,
-    format_count,
-    format_footer,
     format_header,
     format_response,
     format_stats,
