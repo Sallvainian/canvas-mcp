@@ -11,7 +11,7 @@ from ..core.cache import (
     id_to_course_code_cache,
 )
 from ..core.client import fetch_all_paginated_results, make_canvas_request
-from ..core.dates import format_date, format_date_smart
+from ..core.dates import format_date
 from ..core.response_formatter import (
     Verbosity,
     format_header,
