@@ -4,6 +4,8 @@ These tests measure token consumption of tool responses to verify
 the compact format achieves expected token savings.
 """
 
+import datetime
+
 
 
 def estimate_tokens(text: str) -> int:
@@ -53,10 +55,13 @@ class TestTokenEstimation:
 
     def test_formatted_output(self) -> None:
         """Test formatted tool output estimation."""
+        # Use current year to match format_date_smart behavior
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        
         # Typical verbose assignment output
-        verbose = """ID: 123456
+        verbose = f"""ID: 123456
 Name: Quiz 1 - Introduction to Biology
-Due: 2026-01-21T23:59:00Z
+Due: {current_year}-01-21T23:59:00Z
 Points: 100
 """
         verbose_tokens = estimate_tokens(verbose)
@@ -76,6 +81,9 @@ class TestResponseFormats:
 
     def test_assignment_list_compact_savings(self) -> None:
         """Verify compact assignment list saves >40% tokens."""
+        # Use current year to match format_date_smart behavior
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        
         # Simulate 10 assignments in verbose format
         verbose_items = []
         compact_items = []
@@ -84,7 +92,7 @@ class TestResponseFormats:
             verbose_items.append(
                 f"ID: {1000 + i}\n"
                 f"Name: Assignment {i + 1} - Sample Assignment Title\n"
-                f"Due: 2026-01-{21 + (i % 10):02d}T23:59:00Z\n"
+                f"Due: {current_year}-01-{21 + (i % 10):02d}T23:59:00Z\n"
                 f"Points: {100 + i * 10}\n"
             )
             compact_items.append(
@@ -107,12 +115,15 @@ class TestResponseFormats:
 
     def test_submission_list_compact_savings(self) -> None:
         """Verify compact submission list saves >60% tokens."""
+        # Use current year to match format_date_smart behavior
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        
         # Simulate 25 submissions
         verbose_items = []
         compact_items = []
 
         for i in range(25):
-            submitted = "2026-01-20T14:30:00Z" if i % 3 != 0 else "Not submitted"
+            submitted = f"{current_year}-01-20T14:30:00Z" if i % 3 != 0 else "Not submitted"
             score = str(85 + (i % 15)) if i % 3 != 0 else "Not graded"
             grade = score if score != "Not graded" else "Not graded"
 
@@ -142,11 +153,14 @@ class TestResponseFormats:
 
     def test_analytics_summary_savings(self) -> None:
         """Verify analytics summary mode saves >85% tokens."""
+        # Use current year to match format_date_smart behavior
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        
         # Full analytics output (simplified)
-        verbose_output = """Assignment Analytics for 'Quiz 1' in Course TEST_123
+        verbose_output = f"""Assignment Analytics for 'Quiz 1' in Course TEST_123
 
 Assignment Details:
-  Due: 2026-01-21T23:59:00Z (Past Due)
+  Due: {current_year}-01-21T23:59:00Z (Past Due)
   Points Possible: 100
   Published: Yes
 
@@ -195,7 +209,10 @@ class TestDateFormatSavings:
 
     def test_date_format_compact(self) -> None:
         """Verify compact date format saves tokens."""
-        iso_date = "2026-01-21T23:59:00Z"
+        # Use current year to match format_date_smart behavior
+        current_year = datetime.datetime.now(datetime.timezone.utc).year
+        
+        iso_date = f"{current_year}-01-21T23:59:00Z"
         compact_date = "Jan 21"
 
         iso_tokens = estimate_tokens(iso_date)
@@ -208,7 +225,9 @@ class TestDateFormatSavings:
 
     def test_relative_date_format(self) -> None:
         """Verify relative date format is compact."""
-        iso_date = "2026-01-24T23:59:00Z"  # 3 days from today
+        # Use a date 3 days from now to test relative format
+        future_date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+        iso_date = future_date.strftime("%Y-%m-%dT23:59:00Z")
         relative_date = "in 3 days"
 
         iso_tokens = estimate_tokens(iso_date)
