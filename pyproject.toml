@@ -111,8 +111,3 @@ addopts = "-v --tb=short"
 asyncio_mode = "auto"
 pythonpath = ["src"]
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-]
