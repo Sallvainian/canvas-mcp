@@ -4,6 +4,8 @@ These tests measure token consumption of tool responses to verify
 the compact format achieves expected token savings.
 """
 
+from datetime import datetime, timedelta, timezone
+
 
 
 def estimate_tokens(text: str) -> int:
@@ -195,8 +197,10 @@ class TestDateFormatSavings:
 
     def test_date_format_compact(self) -> None:
         """Verify compact date format saves tokens."""
-        iso_date = "2026-01-21T23:59:00Z"
-        compact_date = "Jan 21"
+        # Use current date to avoid hardcoded values
+        current_date = datetime.now(timezone.utc)
+        iso_date = current_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+        compact_date = current_date.strftime("%b %d")
 
         iso_tokens = estimate_tokens(iso_date)
         compact_tokens = estimate_tokens(compact_date)
@@ -208,7 +212,9 @@ class TestDateFormatSavings:
 
     def test_relative_date_format(self) -> None:
         """Verify relative date format is compact."""
-        iso_date = "2026-01-24T23:59:00Z"  # 3 days from today
+        # Generate a date 3 days from now dynamically
+        future_date = datetime.now(timezone.utc) + timedelta(days=3)
+        iso_date = future_date.strftime("%Y-%m-%dT%H:%M:%SZ")
         relative_date = "in 3 days"
 
         iso_tokens = estimate_tokens(iso_date)
