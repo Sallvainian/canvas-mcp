@@ -81,7 +81,7 @@ def register_other_tools(mcp: FastMCP):
                 pub = "Y" if page.get("published", False) else "N"
                 front = "F" if page.get("front_page", False) else ""
                 updated = format_date_smart(page.get("updated_at"), "compact")
-                items.append(f"{url}|{title}|{pub}{front}|{updated}")
+                items.append(f"{url}|{title}|{pub}|{front or '-'}|{updated}")
 
             body = "\n".join(items)
             return format_response(header, body, v)
