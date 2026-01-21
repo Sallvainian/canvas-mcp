@@ -177,7 +177,7 @@ Students Missing Submission:
 """
 
         # Summary mode output
-        compact_output = "analytics|Quiz 1|TEST_123\n23/25 submitted|2 missing|avg:84.5|med:87|late:3\n<70%:2|>90%:3"
+        compact_output = "analytics|Quiz 1|TEST_123\nsub:23|miss:2|avg:84.5|med:87.0|late:3\n<70%:2|>90%:3"
 
         verbose_tokens = estimate_tokens(verbose_output)
         compact_tokens = estimate_tokens(compact_output)
