@@ -18,6 +18,7 @@ from .core.logging import log_error, log_info
 from .resources import register_resources_and_prompts
 from .tools import (
     register_accessibility_tools,
+    register_analytics_tools,
     register_assignment_tools,
     register_code_execution_tools,
     register_course_tools,
@@ -60,6 +61,7 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_peer_review_comment_tools(mcp)
     register_messaging_tools(mcp)
     register_accessibility_tools(mcp)
+    register_analytics_tools(mcp)
 
     # Conditionally register student tools
     if user_type in ("all", "student"):

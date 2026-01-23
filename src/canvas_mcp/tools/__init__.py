@@ -14,6 +14,7 @@ from .accessibility import register_accessibility_tools
 from .discovery import register_discovery_tools
 from .code_execution import register_code_execution_tools
 from .pages import register_page_tools
+from .analytics import register_analytics_tools
 
 __all__ = [
     'register_course_tools',
@@ -29,5 +30,6 @@ __all__ = [
     'register_accessibility_tools',
     'register_discovery_tools',
     'register_code_execution_tools',
-    'register_page_tools'
+    'register_page_tools',
+    'register_analytics_tools'
 ]
