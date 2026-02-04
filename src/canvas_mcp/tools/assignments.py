@@ -25,14 +25,99 @@ def register_assignment_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
+    async def list_grading_periods(
+        course_identifier: str | int,
+        verbosity: str | None = None
+    ) -> str:
+        """List grading periods (marking periods) for a specific course.
+
+        Use this to get grading period IDs which can then be used to filter
+        assignments by marking period using the list_assignments tool.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            verbosity: Output format - "compact" (default), "standard", or "verbose"
+        """
+        course_id = await get_course_id(course_identifier)
+
+        # Determine verbosity level
+        if verbosity:
+            try:
+                v = Verbosity(verbosity.lower())
+            except ValueError:
+                v = get_verbosity()
+        else:
+            v = get_verbosity()
+
+        response = await make_canvas_request(
+            "get", f"/courses/{course_id}/grading_periods"
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error fetching grading periods: {response['error']}"
+
+        # The response contains a "grading_periods" key
+        grading_periods = response.get("grading_periods", [])
+
+        if not grading_periods:
+            return f"No grading periods found for course {course_identifier}. This course may not use grading periods."
+
+        # Try to get the course code for display
+        course_display = await get_course_code(course_id) or course_identifier
+
+        if v == Verbosity.COMPACT:
+            # Token-efficient format: pipe-delimited
+            header = format_header("gp", course_display, v)
+            items = []
+            for gp in grading_periods:
+                gp_id = gp.get("id")
+                title = gp.get("title", "Unnamed")
+                start = format_date_smart(gp.get("start_date"), "compact")
+                end = format_date_smart(gp.get("end_date"), "compact")
+                is_closed = "closed" if gp.get("is_closed") else "open"
+                items.append(f"{gp_id}|{title}|{start}-{end}|{is_closed}")
+
+            body = "\n".join(items)
+            return format_response(header, body, v)
+
+        else:
+            # Standard/verbose format with labels
+            output_lines = [f"Grading Periods for Course {course_display}:\n"]
+
+            for gp in grading_periods:
+                gp_id = gp.get("id")
+                title = gp.get("title", "Unnamed Period")
+                start_date = format_date(gp.get("start_date")) if gp.get("start_date") else "Not set"
+                end_date = format_date(gp.get("end_date")) if gp.get("end_date") else "Not set"
+                close_date = format_date(gp.get("close_date")) if gp.get("close_date") else "Not set"
+                is_closed = gp.get("is_closed", False)
+                weight = gp.get("weight")
+
+                output_lines.append(f"ID: {gp_id}")
+                output_lines.append(f"Title: {title}")
+                output_lines.append(f"Start: {start_date}")
+                output_lines.append(f"End: {end_date}")
+                output_lines.append(f"Close Date: {close_date}")
+                output_lines.append(f"Status: {'Closed' if is_closed else 'Open'}")
+                if weight is not None:
+                    output_lines.append(f"Weight: {weight}%")
+                output_lines.append("")
+
+            return "\n".join(output_lines)
+
+    @mcp.tool()
+    @validate_params
     async def list_assignments(
         course_identifier: str | int,
+        grading_period_id: int | None = None,
         verbosity: str | None = None
     ) -> str:
         """List assignments for a specific course.
 
         Args:
             course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            grading_period_id: Optional grading period (marking period) ID to filter assignments.
+                             Use list_grading_periods to get available period IDs.
             verbosity: Output format - "compact" (default, token-efficient), "standard" (readable), or "verbose" (detailed)
         """
         course_id = await get_course_id(course_identifier)
@@ -46,18 +131,43 @@ def register_assignment_tools(mcp: FastMCP):
         else:
             v = get_verbosity()
 
-        params = {
-            "per_page": 100,
-            "include[]": ["all_dates", "submission"]
-        }
+        # If grading_period_id is provided, use assignment_groups endpoint with grading period filter
+        if grading_period_id:
+            params = {
+                "per_page": 100,
+                "include[]": ["assignments"],
+                "grading_period_id": grading_period_id
+            }
 
-        all_assignments = await fetch_all_paginated_results(f"/courses/{course_id}/assignments", params)
+            assignment_groups = await fetch_all_paginated_results(
+                f"/courses/{course_id}/assignment_groups", params
+            )
+
+            if isinstance(assignment_groups, dict) and "error" in assignment_groups:
+                return f"Error fetching assignments: {assignment_groups['error']}"
+
+            # Extract assignments from all groups
+            all_assignments = []
+            for group in assignment_groups:
+                assignments = group.get("assignments", [])
+                all_assignments.extend(assignments)
+        else:
+            # Standard endpoint without grading period filter
+            params = {
+                "per_page": 100,
+                "include[]": ["all_dates", "submission"]
+            }
+
+            all_assignments = await fetch_all_paginated_results(f"/courses/{course_id}/assignments", params)
 
         if isinstance(all_assignments, dict) and "error" in all_assignments:
             return f"Error fetching assignments: {all_assignments['error']}"
 
         if not all_assignments:
-            return f"No assignments found for course {course_identifier}."
+            msg = f"No assignments found for course {course_identifier}"
+            if grading_period_id:
+                msg += f" in grading period {grading_period_id}"
+            return msg + "."
 
         # Try to get the course code for display
         course_display = await get_course_code(course_id) or course_identifier
@@ -89,7 +199,10 @@ def register_assignment_tools(mcp: FastMCP):
                     f"ID: {assignment_id}\nName: {name}\nDue: {due_at}\nPoints: {points}\n"
                 )
 
-            return f"Assignments for Course {course_display}:\n\n" + "\n".join(assignments_info)
+            header = f"Assignments for Course {course_display}"
+            if grading_period_id:
+                header += f" (Grading Period {grading_period_id})"
+            return header + ":\n\n" + "\n".join(assignments_info)
 
     @mcp.tool()
     @validate_params
@@ -122,6 +235,11 @@ def register_assignment_tools(mcp: FastMCP):
             f"Locked: {response.get('locked_for_user', False)}"
         ]
 
+        if response.get("external_tool_tag_attributes"):
+            ext = response["external_tool_tag_attributes"]
+            details.append(f"External Tool URL: {ext.get('url', 'N/A')}")
+            details.append(f"External Tool New Tab: {ext.get('new_tab', False)}")
+
         # Try to get the course code for display
         course_display = await get_course_code(course_id) or course_identifier
         return f"Assignment Details for ID {assignment_id} in course {course_display}:\n\n" + "\n".join(details)
@@ -137,7 +255,9 @@ def register_assignment_tools(mcp: FastMCP):
         points_possible: float | None = None,
         published: bool | None = None,
         lock_at: str | None = None,
-        unlock_at: str | None = None
+        unlock_at: str | None = None,
+        submission_types: str | None = None,
+        external_tool_url: str | None = None
     ) -> str:
         """Update an assignment's properties.
 
@@ -151,6 +271,8 @@ def register_assignment_tools(mcp: FastMCP):
             published: Whether the assignment is published
             lock_at: Date to lock submissions (same format as due_at)
             unlock_at: Date to unlock the assignment (same format as due_at)
+            submission_types: Comma-separated list of submission types (e.g., "external_tool", "online_upload,online_text_entry")
+            external_tool_url: URL for external tool submissions (used with submission_types="external_tool")
         """
         course_id = await get_course_id(course_identifier)
         assignment_id_str = str(assignment_id)
@@ -188,6 +310,13 @@ def register_assignment_tools(mcp: FastMCP):
             except ValueError as e:
                 return f"Error parsing unlock date: {e}"
 
+        if submission_types is not None:
+            types_list = [s.strip() for s in submission_types.split(",")]
+            assignment_data["submission_types"] = types_list
+
+        if external_tool_url is not None:
+            assignment_data["external_tool_tag_attributes"] = {"url": external_tool_url}
+
         # Validate that at least one field is being updated
         if not assignment_data:
             return "Error: No update data provided. Please specify at least one field to update."
@@ -214,6 +343,37 @@ def register_assignment_tools(mcp: FastMCP):
             confirmation += f"  - {field}: {value}\n"
 
         return confirmation
+
+    @mcp.tool()
+    @validate_params
+    async def delete_assignment(
+        course_identifier: str | int,
+        assignment_id: str | int
+    ) -> str:
+        """Delete an assignment from a course.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            assignment_id: The Canvas assignment ID to delete
+        """
+        course_id = await get_course_id(course_identifier)
+        assignment_id_str = str(assignment_id)
+
+        # Fetch assignment name before deleting for confirmation
+        assignment = await make_canvas_request(
+            "get", f"/courses/{course_id}/assignments/{assignment_id_str}"
+        )
+        assignment_name = assignment.get("name", f"ID {assignment_id}") if "error" not in assignment else f"ID {assignment_id}"
+
+        response = await make_canvas_request(
+            "delete", f"/courses/{course_id}/assignments/{assignment_id_str}"
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error deleting assignment: {response['error']}"
+
+        course_display = await get_course_code(course_id) or course_identifier
+        return f"Successfully deleted assignment '{assignment_name}' (ID {assignment_id}) from course {course_display}."
 
     @mcp.tool()
     async def assign_peer_review(course_identifier: str, assignment_id: str, reviewer_id: str, reviewee_id: str) -> str:
@@ -501,6 +661,79 @@ def register_assignment_tools(mcp: FastMCP):
                 )
 
             return f"Submissions for Assignment {assignment_id} in course {course_display}:\n\n" + "\n".join(submissions_info)
+
+    @mcp.tool()
+    @validate_params
+    async def get_submission_content(
+        course_identifier: str | int,
+        assignment_id: str | int,
+        user_id: str | int
+    ) -> str:
+        """Get the content/details of a specific student's submission to verify they actually submitted work.
+
+        Returns submission type, body text (or preview), URL, attachment filenames, and submitted_at.
+        Useful for verifying a student actually submitted content before grading.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_id: The Canvas assignment ID
+            user_id: The Canvas user ID of the student
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request(
+            "get",
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}"
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error fetching submission: {response['error']}"
+
+        submission_type = response.get("submission_type", "none")
+        submitted_at = response.get("submitted_at")
+        body = response.get("body")
+        url = response.get("url")
+        attachments = response.get("attachments", [])
+        score = response.get("score")
+        grade = response.get("grade")
+        workflow_state = response.get("workflow_state", "unsubmitted")
+
+        lines = []
+        lines.append(f"User ID: {user_id}")
+        lines.append(f"Assignment ID: {assignment_id}")
+        lines.append(f"Workflow State: {workflow_state}")
+        lines.append(f"Submission Type: {submission_type or 'none'}")
+        lines.append(f"Submitted At: {submitted_at or 'Not submitted'}")
+        lines.append(f"Score: {score if score is not None else 'Not graded'}")
+        lines.append(f"Grade: {grade or 'Not graded'}")
+
+        # Content details
+        has_content = False
+
+        if body:
+            has_content = True
+            preview = body[:300].strip()
+            # Strip HTML tags for preview
+            import re
+            preview = re.sub(r'<[^>]+>', '', preview)
+            lines.append(f"Body ({len(body)} chars): {preview}...")
+
+        if url:
+            has_content = True
+            lines.append(f"URL: {url}")
+
+        if attachments:
+            has_content = True
+            att_names = [f"{a.get('display_name', 'unnamed')} ({a.get('size', 0)} bytes)" for a in attachments]
+            lines.append(f"Attachments: {', '.join(att_names)}")
+
+        if not has_content and submission_type not in (None, "none"):
+            lines.append("Content: (external tool or other type - no inline content)")
+            has_content = True
+
+        lines.append(f"Has Content: {'Yes' if has_content else 'No'}")
+
+        return "\n".join(lines)
 
     @mcp.tool()
     @validate_params
