@@ -127,13 +127,134 @@ Best regards,
         }
     }
 
+    # Grading feedback templates - composable rubric-based feedback phrases
+    GRADING_FEEDBACK_TEMPLATES = {
+        "excellent": {
+            "subject": "Excellent Work on {assignment_name}",
+            "body": """{student_name} - Excellent work on {assignment_name}! Score: {score}/{max_score}.
+
+{criterion_name}: Outstanding performance. Your work demonstrates thorough understanding and exceptional quality."""
+        },
+        "good": {
+            "subject": "Good Work on {assignment_name}",
+            "body": """{student_name} - Good work on {assignment_name}. Score: {score}/{max_score}.
+
+{criterion_name}: Solid effort that meets expectations. Minor areas for improvement noted."""
+        },
+        "needs_improvement": {
+            "subject": "Feedback on {assignment_name}",
+            "body": """{student_name} - Score: {score}/{max_score} on {assignment_name}.
+
+{criterion_name}: This area needs improvement. Please review the rubric criteria and consider revising your approach. Feel free to visit office hours to discuss strategies for strengthening this area."""
+        },
+        "missing": {
+            "subject": "Missing Submission: {assignment_name}",
+            "body": """{student_name} - You have not submitted {assignment_name}. Score: 0/{max_score}.
+
+Please submit your work as soon as possible. If you are experiencing difficulties, reach out immediately so we can discuss options."""
+        },
+        "late_submission": {
+            "subject": "Late Submission Graded: {assignment_name}",
+            "body": """{student_name} - Your late submission for {assignment_name} has been graded. Score: {score}/{max_score}.
+
+{criterion_name}: {feedback_comment}
+
+Note: A late penalty may have been applied per the course late policy."""
+        },
+        "criterion_excellent": {
+            "subject": "",
+            "body": """{criterion_name}: Excellent ({score}/{max_score}). {feedback_comment}"""
+        },
+        "criterion_good": {
+            "subject": "",
+            "body": """{criterion_name}: Good ({score}/{max_score}). {feedback_comment}"""
+        },
+        "criterion_needs_work": {
+            "subject": "",
+            "body": """{criterion_name}: Needs improvement ({score}/{max_score}). {feedback_comment}"""
+        },
+        "criterion_missing": {
+            "subject": "",
+            "body": """{criterion_name}: Not addressed (0/{max_score}). This criterion was not met. Please review the rubric requirements."""
+        }
+    }
+
+    @classmethod
+    def compose_grading_feedback(
+        cls,
+        student_name: str,
+        assignment_name: str,
+        total_score: float,
+        max_total: float,
+        criterion_feedbacks: list[dict[str, Any]] | None = None
+    ) -> str:
+        """Compose a complete grading feedback comment from multiple criterion templates.
+
+        Args:
+            student_name: Student's display name
+            assignment_name: Assignment title
+            total_score: Total score awarded
+            max_total: Maximum possible score
+            criterion_feedbacks: List of dicts with keys:
+                - criterion_name: Name of the criterion
+                - score: Points awarded
+                - max_score: Max points for criterion
+                - level: "excellent", "good", "needs_work", or "missing"
+                - comment: Optional additional comment
+
+        Returns:
+            Formatted feedback string combining all criterion feedback
+        """
+        # Determine overall level
+        ratio = total_score / max_total if max_total > 0 else 0
+        if ratio >= 0.9:
+            overall_level = "excellent"
+        elif ratio >= 0.7:
+            overall_level = "good"
+        elif total_score == 0:
+            overall_level = "missing"
+        else:
+            overall_level = "needs_improvement"
+
+        # Build header from overall template
+        overall_template = cls.GRADING_FEEDBACK_TEMPLATES.get(overall_level, {})
+        header = overall_template.get("body", "Score: {score}/{max_score}").format(
+            student_name=student_name,
+            assignment_name=assignment_name,
+            score=total_score,
+            max_score=max_total,
+            criterion_name="Overall",
+            feedback_comment=""
+        ).strip()
+
+        if not criterion_feedbacks:
+            return header
+
+        # Build criterion-level feedback
+        parts = [header, ""]
+        for cf in criterion_feedbacks:
+            level = cf.get("level", "good")
+            template_key = f"criterion_{level}"
+            template = cls.GRADING_FEEDBACK_TEMPLATES.get(template_key, {})
+            body = template.get("body", "{criterion_name}: {score}/{max_score}")
+
+            formatted = body.format(
+                criterion_name=cf.get("criterion_name", "Criterion"),
+                score=cf.get("score", 0),
+                max_score=cf.get("max_score", 0),
+                feedback_comment=cf.get("comment", "")
+            ).strip()
+            parts.append(formatted)
+
+        return "\n".join(parts)
+
     @classmethod
     def get_template(cls, category: str, template_name: str) -> dict[str, str] | None:
         """
         Get a specific template by category and name.
 
         Args:
-            category: Template category (e.g., 'peer_review', 'assignment')
+            category: Template category (e.g., 'peer_review', 'assignment', 'grading_feedback')
             template_name: Specific template name within the category
 
         Returns:
@@ -143,7 +264,8 @@ Best regards,
             "peer_review": cls.PEER_REVIEW_TEMPLATES,
             "assignment": cls.ASSIGNMENT_TEMPLATES,
             "discussion": cls.DISCUSSION_TEMPLATES,
-            "grade": cls.GRADE_TEMPLATES
+            "grade": cls.GRADE_TEMPLATES,
+            "grading_feedback": cls.GRADING_FEEDBACK_TEMPLATES
         }
 
         category_templates = category_map.get(category)
@@ -213,7 +335,8 @@ Best regards,
             "peer_review": list(cls.PEER_REVIEW_TEMPLATES.keys()),
             "assignment": list(cls.ASSIGNMENT_TEMPLATES.keys()),
             "discussion": list(cls.DISCUSSION_TEMPLATES.keys()),
-            "grade": list(cls.GRADE_TEMPLATES.keys())
+            "grade": list(cls.GRADE_TEMPLATES.keys()),
+            "grading_feedback": list(cls.GRADING_FEEDBACK_TEMPLATES.keys())
         }
 
     @classmethod

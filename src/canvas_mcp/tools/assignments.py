@@ -1,7 +1,32 @@
 """Assignment-related MCP tools for Canvas API."""
 
 import datetime
+import re
 from statistics import StatisticsError, mean, median, stdev
+
+import markdown as _markdown  # type: ignore[import-untyped]
+
+
+def description_to_html(text: str) -> str:
+    """Convert a description to Canvas-ready HTML.
+
+    Accepts either plain markdown or raw HTML.
+    - If the text already contains HTML tags, it is returned as-is.
+    - Otherwise, markdown is converted to HTML (supports **bold**, *italic*,
+      # headings, - lists, numbered lists, and plain paragraphs).
+
+    This means you can write descriptions naturally in markdown without
+    needing to hand-craft HTML, and existing HTML descriptions still work.
+
+    Examples:
+        "**Bold** and *italic*"          -> "<p><strong>Bold</strong> and <em>italic</em></p>"
+        "- item one\\n- item two"         -> "<ul><li>item one</li><li>item two</li></ul>"
+        "<p><strong>Bold</strong></p>"   -> "<p><strong>Bold</strong></p>"  (unchanged)
+    """
+    if re.search(r"<[a-zA-Z][^>]*>", text):
+        # Already contains HTML tags — pass through unchanged
+        return text
+    return _markdown.markdown(text, extensions=["nl2br"])
 
 from mcp.server.fastmcp import FastMCP
 
@@ -63,7 +88,7 @@ def register_assignment_tools(mcp: FastMCP):
             return f"No grading periods found for course {course_identifier}. This course may not use grading periods."
 
         # Try to get the course code for display
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
 
         if v == Verbosity.COMPACT:
             # Token-efficient format: pipe-delimited
@@ -170,7 +195,7 @@ def register_assignment_tools(mcp: FastMCP):
             return msg + "."
 
         # Try to get the course code for display
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
 
         if v == Verbosity.COMPACT:
             # Token-efficient format: pipe-delimited, abbreviated
@@ -241,7 +266,7 @@ def register_assignment_tools(mcp: FastMCP):
             details.append(f"External Tool New Tab: {ext.get('new_tab', False)}")
 
         # Try to get the course code for display
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
         return f"Assignment Details for ID {assignment_id} in course {course_display}:\n\n" + "\n".join(details)
 
     @mcp.tool()
@@ -266,7 +291,9 @@ def register_assignment_tools(mcp: FastMCP):
             assignment_id: The Canvas assignment ID
             due_at: Due date (e.g., '12/10/2025', 'Dec 10, 2025', '2025-12-10')
             name: Assignment name
-            description: Assignment description (HTML)
+            description: Assignment description — accepts markdown OR raw HTML.
+                Markdown (**bold**, *italic*, # headings, - lists) is auto-converted
+                to HTML. Raw HTML is passed through unchanged.
             points_possible: Point value for the assignment
             published: Whether the assignment is published
             lock_at: Date to lock submissions (same format as due_at)
@@ -290,7 +317,7 @@ def register_assignment_tools(mcp: FastMCP):
             assignment_data["name"] = name
 
         if description is not None:
-            assignment_data["description"] = description
+            assignment_data["description"] = description_to_html(description)
 
         if points_possible is not None:
             assignment_data["points_possible"] = points_possible
@@ -332,7 +359,7 @@ def register_assignment_tools(mcp: FastMCP):
             return f"Error updating assignment: {response['error']}"
 
         # Build confirmation message
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
         updated_fields = list(assignment_data.keys())
         assignment_name = response.get("name", f"ID {assignment_id}")
 
@@ -372,7 +399,7 @@ def register_assignment_tools(mcp: FastMCP):
         if isinstance(response, dict) and "error" in response:
             return f"Error deleting assignment: {response['error']}"
 
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
         return f"Successfully deleted assignment '{assignment_name}' (ID {assignment_id}) from course {course_display}."
 
     @mcp.tool()
@@ -443,7 +470,7 @@ def register_assignment_tools(mcp: FastMCP):
             return f"Error assigning peer review: {response['error']}"
 
         # Try to get the course code for display
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
 
         return f"Successfully assigned peer review in course {course_display}:\n" + \
                f"Assignment ID: {assignment_id}\n" + \
@@ -538,7 +565,7 @@ def register_assignment_tools(mcp: FastMCP):
                 }
 
         # Format the output
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
         output = f"Peer Reviews for Assignment {assignment_id} in course {course_display}:\n\n"
 
         if not peer_reviews_by_submission:
@@ -631,7 +658,7 @@ def register_assignment_tools(mcp: FastMCP):
             # Continue with original data for functionality
 
         # Try to get the course code for display
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
 
         if v == Verbosity.COMPACT:
             # Token-efficient format: pipe-delimited
@@ -969,7 +996,7 @@ def register_assignment_tools(mcp: FastMCP):
             v = get_verbosity()
 
         # Calculate key statistics
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
         total_students = submission_stats["total_students"]
         submitted = submission_stats["submitted_count"]
         graded = submission_stats["graded_count"]
@@ -1071,7 +1098,9 @@ def register_assignment_tools(mcp: FastMCP):
         Args:
             course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
             name: The name/title of the assignment (required)
-            description: HTML content for the assignment description
+            description: Assignment description — accepts markdown OR raw HTML.
+                Markdown (**bold**, *italic*, # headings, - lists) is auto-converted
+                to HTML. Raw HTML is passed through unchanged.
             submission_types: Comma-separated list of allowed submission types:
                 online_text_entry, online_url, online_upload, discussion_topic,
                 none, on_paper, external_tool
@@ -1113,7 +1142,7 @@ def register_assignment_tools(mcp: FastMCP):
         }
 
         if description:
-            assignment_data["description"] = description
+            assignment_data["description"] = description_to_html(description)
 
         if submission_types_list:
             assignment_data["submission_types"] = submission_types_list
@@ -1179,7 +1208,7 @@ def register_assignment_tools(mcp: FastMCP):
         assignment_types = response.get("submission_types", [])
         html_url = response.get("html_url", "")
 
-        course_display = await get_course_code(course_id) or course_identifier
+        course_display = await get_course_code(course_id) if course_id else str(course_identifier)
 
         result = "✅ Assignment created successfully!\n\n"
         result += f"**{assignment_name}**\n"

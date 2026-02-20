@@ -824,6 +824,298 @@ Create a new discussion post.
 
 ---
 
+### Search Helpers
+
+#### `find_assignment`
+Search assignments by name (case-insensitive).
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `name_query`: Search term to match against assignment titles
+
+**Example:**
+```
+"Find the midterm assignment"
+"Search for 'Week 3' assignments"
+```
+
+---
+
+#### `find_student`
+Search students by name (case-insensitive).
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `name_query`: Search term to match against student names
+
+**Example:**
+```
+"Find student named Smith"
+"Search for students named John"
+```
+
+---
+
+#### `find_discussion`
+Search discussion topics by title (case-insensitive).
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `name_query`: Search term to match against discussion titles
+
+**Example:**
+```
+"Find discussions about ethics"
+"Search for 'Week 5' discussion"
+```
+
+---
+
+### Discussion Analytics
+
+#### `get_discussion_participation_summary`
+Get a participation summary showing who posted, replied, and who is silent.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `topic_id`: Discussion topic ID
+
+**Example:**
+```
+"Who hasn't participated in the Week 3 discussion?"
+"Show me discussion participation breakdown"
+```
+
+**Returns:** Categorized students (full participation, posted only, replied only, silent) with IDs for bulk messaging.
+
+---
+
+#### `grade_discussion_participation`
+Auto-grade discussion participation based on post and reply counts.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `topic_id`: Discussion topic ID
+- `assignment_id`: Assignment ID to post grades to
+- `points_for_post` (optional): Points per original post (default: 5.0)
+- `points_for_reply` (optional): Points per reply (default: 3.0)
+- `max_points` (optional): Maximum total points
+- `dry_run` (optional): Preview grades without submitting (default: true)
+
+**Example:**
+```
+"Auto-grade discussion participation for Topic 5"
+"Preview discussion grades before posting"
+```
+
+---
+
+#### `export_discussion_data`
+Export discussion data including entries and replies.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `topic_id`: Discussion topic ID
+- `format` (optional): "csv" (default) or "summary"
+
+---
+
+### Quiz Management
+
+#### `list_quizzes`
+List all quizzes in a course.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+
+---
+
+#### `get_quiz_details`
+Get detailed information about a specific quiz.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+---
+
+#### `create_quiz`
+Create a new quiz.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `title`: Quiz title (required)
+- `quiz_type` (optional): "practice_quiz", "assignment", "graded_survey", "survey"
+- `description` (optional): Quiz description (HTML)
+- `time_limit` (optional): Time limit in minutes
+- `allowed_attempts` (optional): Number of attempts (-1 for unlimited)
+- `shuffle_answers` (optional): Randomize answer order
+- `due_at` (optional): Due date (ISO 8601)
+- `points_possible` (optional): Total points
+- `published` (optional): Publish immediately (default: false)
+
+---
+
+#### `update_quiz`
+Update an existing quiz's settings.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+- Same optional params as `create_quiz`
+
+---
+
+#### `delete_quiz`
+Delete a quiz from a course.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+---
+
+#### `publish_quiz` / `unpublish_quiz`
+Control quiz visibility.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+---
+
+#### `list_quiz_questions`
+List questions in a quiz.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+---
+
+#### `add_quiz_question`
+Add a question to a quiz.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+- `question_type`: multiple_choice_question, true_false_question, short_answer_question, essay_question, fill_in_multiple_blanks_question, matching_question, numerical_question
+- `question_text`: The question prompt (HTML)
+- `points_possible` (optional): Points for this question (default: 1)
+- `answers` (optional): JSON array of answer objects
+
+---
+
+#### `update_quiz_question` / `delete_quiz_question`
+Modify or remove quiz questions.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+- `question_id`: Question ID
+
+---
+
+#### `get_quiz_statistics`
+Get quiz performance analytics.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+**Returns:** Average score, high/low scores, question-level analysis.
+
+---
+
+#### `list_quiz_submissions`
+View quiz submissions.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `quiz_id`: Quiz ID
+
+---
+
+### Gradebook Management
+
+#### `export_grades`
+Export gradebook data as CSV or summary.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `format` (optional): "csv" (default) or "summary"
+
+**Example:**
+```
+"Export grades for BADM 350"
+"Show me a gradebook summary"
+```
+
+---
+
+#### `get_assignment_groups`
+List assignment groups (weighted grade categories).
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+
+---
+
+#### `create_assignment_group`
+Create a new assignment group.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `name`: Group name (e.g., "Homework", "Exams")
+- `weight` (optional): Weight as percentage
+- `position` (optional): Position in group list
+- `drop_lowest` (optional): Number of lowest scores to drop
+- `drop_highest` (optional): Number of highest scores to drop
+
+---
+
+#### `update_assignment_group`
+Update an existing assignment group.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `group_id`: Assignment group ID
+- Same optional params as `create_assignment_group`
+
+---
+
+#### `configure_late_policy`
+Configure late and missing submission policies.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `late_submission_deduction_enabled` (optional): Enable late deduction (default: true)
+- `late_submission_deduction` (optional): Percentage per interval (default: 10.0)
+- `late_submission_interval` (optional): "day" or "hour" (default: "day")
+- `late_submission_minimum_percent_enabled` (optional): Enable minimum grade floor
+- `late_submission_minimum_percent` (optional): Minimum grade percentage
+- `missing_submission_deduction_enabled` (optional): Auto-grade missing submissions
+- `missing_submission_deduction` (optional): Percentage for missing (default: 100.0)
+
+---
+
+### Announcement Management
+
+#### `delete_announcements`
+Smart announcement deletion with filtering. Accepts single ID, list of IDs, or filter criteria.
+
+**Parameters:**
+- `course_identifier`: Course code or ID
+- `announcement_id` (optional): Single ID to delete
+- `announcement_ids` (optional): Comma-separated IDs to delete
+- `title_contains` (optional): Filter by title substring
+- `title_regex` (optional): Filter by regex pattern
+- `older_than` (optional): Delete announcements older than this date (ISO 8601)
+- `newer_than` (optional): Delete announcements newer than this date (ISO 8601)
+- `dry_run` (optional): Preview deletions without executing (default: true)
+
+---
+
 ## Developer Tools
 
 These tools help developers discover, explore, and execute Canvas code execution API operations.

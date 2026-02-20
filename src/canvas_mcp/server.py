@@ -23,14 +23,19 @@ from .tools import (
     register_code_execution_tools,
     register_course_tools,
     register_discovery_tools,
+    register_discussion_analytics_tools,
     register_discussion_tools,
+    register_enrollment_tools,
+    register_gradebook_tools,
     register_messaging_tools,
     register_module_tools,
     register_other_tools,
     register_page_tools,
     register_peer_review_comment_tools,
     register_peer_review_tools,
+    register_quiz_tools,
     register_rubric_tools,
+    register_search_helper_tools,
     register_student_tools,
 )
 
@@ -53,6 +58,8 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_course_tools(mcp)
     register_assignment_tools(mcp)
     register_discussion_tools(mcp)
+    register_discussion_analytics_tools(mcp)
+    register_enrollment_tools(mcp)
     register_module_tools(mcp)
     register_other_tools(mcp)
     register_page_tools(mcp)
@@ -62,6 +69,9 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_messaging_tools(mcp)
     register_accessibility_tools(mcp)
     register_analytics_tools(mcp)
+    register_search_helper_tools(mcp)
+    register_quiz_tools(mcp)
+    register_gradebook_tools(mcp)
 
     # Conditionally register student tools
     if user_type in ("all", "student"):

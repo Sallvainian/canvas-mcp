@@ -224,6 +224,62 @@ async def make_canvas_request(
     return {"error": "Max retries exceeded"}
 
 
+async def upload_file_multipart(
+    upload_url: str,
+    upload_params: dict[str, Any],
+    file_path: str,
+) -> Any:
+    """Upload a file to Canvas via multipart POST (Step 2 of 3-step file upload).
+
+    Canvas file uploads go to an external URL (e.g., S3) that does NOT
+    accept Canvas auth headers. This function uses a fresh httpx client.
+
+    Args:
+        upload_url: The URL returned by the file upload slot request.
+        upload_params: Form fields returned by the file upload slot request.
+        file_path: Local path to the file to upload.
+    """
+    import mimetypes
+    from pathlib import Path
+
+    path = Path(file_path)
+    if not path.exists():
+        return {"error": f"File not found: {file_path}"}
+
+    content_type = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+
+    # Build multipart fields from upload_params + the file itself
+    files = {"file": (path.name, path.read_bytes(), content_type)}
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=False) as client:
+            response = await client.post(
+                upload_url,
+                data=upload_params,
+                files=files,
+            )
+
+            # Canvas returns 200/201 with JSON on direct uploads
+            if response.status_code in (200, 201):
+                return response.json()
+
+            # S3 returns 301/302/303 redirect to Canvas confirmation URL
+            if response.status_code in (301, 302, 303):
+                redirect_url = response.headers.get("Location")
+                if redirect_url:
+                    # Follow the redirect WITH Canvas auth headers
+                    canvas_client = _get_http_client()
+                    confirm = await canvas_client.get(redirect_url)
+                    confirm.raise_for_status()
+                    return confirm.json()
+                return {"error": "Redirect with no Location header"}
+
+            return {"error": f"Upload failed with status {response.status_code}: {response.text}"}
+
+    except Exception as e:
+        return {"error": f"File upload failed: {str(e)}"}
+
+
 async def fetch_all_paginated_results(
     endpoint: str, params: dict[str, Any] | None = None, *, skip_anonymization: bool = False
 ) -> Any:

@@ -20,6 +20,11 @@
       "description": "Content access tools for both students and educators"
     },
     {
+      "id": "search",
+      "name": "Search Helper Tools",
+      "description": "Find Canvas resources by name instead of ID"
+    },
+    {
       "id": "developer",
       "name": "Developer Tools",
       "description": "Bulk operations, code execution, and tool discovery"
@@ -589,6 +594,693 @@
         "Send reminders to all students who haven't submitted"
       ],
       "notes": "Use search_canvas_tools first to discover available imports. Best for 30+ items."
+    },
+    {
+      "name": "find_assignment",
+      "category": "search",
+      "description": "Search assignments by name (case-insensitive)",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "name_query",
+          "type": "string",
+          "required": true,
+          "description": "Search term to match against assignment names"
+        }
+      ],
+      "returns": "Matching assignments with IDs, names, due dates, and points",
+      "examples": [
+        "Find the 'Week 3' assignment in BADM 350",
+        "Search for assignments with 'peer review' in the name"
+      ]
+    },
+    {
+      "name": "find_student",
+      "category": "search",
+      "description": "Search students by name (case-insensitive)",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "name_query",
+          "type": "string",
+          "required": true,
+          "description": "Search term to match against student names"
+        }
+      ],
+      "returns": "Matching students with IDs and names",
+      "examples": [
+        "Find student 'Smith' in BADM 350",
+        "Search for students named 'John'"
+      ]
+    },
+    {
+      "name": "find_discussion",
+      "category": "search",
+      "description": "Search discussions by title (case-insensitive)",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "name_query",
+          "type": "string",
+          "required": true,
+          "description": "Search term to match against discussion titles"
+        }
+      ],
+      "returns": "Matching discussions with IDs and titles",
+      "examples": [
+        "Find the 'Week 5' discussion in my course",
+        "Search for discussions about 'ethics'"
+      ]
+    },
+    {
+      "name": "get_discussion_participation_summary",
+      "category": "educator",
+      "description": "Get discussion participation breakdown (posted/replied/silent)",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "topic_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Discussion topic ID"
+        }
+      ],
+      "returns": "Per-student participation counts: posts, replies, and silent students",
+      "examples": [
+        "Show me who participated in discussion 456",
+        "Which students haven't posted in the Week 3 discussion?"
+      ]
+    },
+    {
+      "name": "grade_discussion_participation",
+      "category": "educator",
+      "description": "Auto-grade discussion participation based on post/reply counts",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "topic_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Discussion topic ID"
+        },
+        {
+          "name": "assignment_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Assignment ID to post grades to"
+        },
+        {
+          "name": "points_for_post",
+          "type": "number",
+          "required": false,
+          "default": 5.0,
+          "description": "Points awarded per original post"
+        },
+        {
+          "name": "points_for_reply",
+          "type": "number",
+          "required": false,
+          "default": 3.0,
+          "description": "Points awarded per reply"
+        },
+        {
+          "name": "max_points",
+          "type": "number",
+          "required": false,
+          "description": "Maximum total points (defaults to assignment's points_possible)"
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "If true, preview grades without submitting"
+        }
+      ],
+      "returns": "Grade preview or confirmation with per-student breakdown",
+      "examples": [
+        "Grade discussion participation: 5 pts per post, 3 pts per reply",
+        "Preview participation grades for discussion 456"
+      ],
+      "notes": "Use dry_run=true first to preview grades before submitting."
+    },
+    {
+      "name": "export_discussion_data",
+      "category": "educator",
+      "description": "Export discussion data as CSV or summary",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "topic_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Discussion topic ID"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "Export format: csv or summary"
+        }
+      ],
+      "returns": "Discussion data in the requested format",
+      "examples": [
+        "Export discussion 456 as CSV",
+        "Give me a summary of the Week 3 discussion"
+      ]
+    },
+    {
+      "name": "list_quizzes",
+      "category": "educator",
+      "description": "List all quizzes in a course",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        }
+      ],
+      "returns": "List of quizzes with IDs, titles, types, and status",
+      "examples": [
+        "Show me all quizzes in BADM 350",
+        "What quizzes are in this course?"
+      ]
+    },
+    {
+      "name": "get_quiz_details",
+      "category": "educator",
+      "description": "Get detailed quiz information",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Full quiz details including settings, questions, and dates",
+      "examples": [
+        "Show me details for quiz 789",
+        "What are the settings for the midterm quiz?"
+      ]
+    },
+    {
+      "name": "create_quiz",
+      "category": "educator",
+      "description": "Create a new quiz with configurable settings",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Quiz title"
+        },
+        {
+          "name": "quiz_type",
+          "type": "string",
+          "required": false,
+          "description": "One of: practice_quiz, assignment, graded_survey, survey"
+        },
+        {
+          "name": "description",
+          "type": "string",
+          "required": false,
+          "description": "Quiz instructions/description (HTML)"
+        },
+        {
+          "name": "time_limit",
+          "type": "integer",
+          "required": false,
+          "description": "Time limit in minutes"
+        },
+        {
+          "name": "allowed_attempts",
+          "type": "integer",
+          "required": false,
+          "description": "Number of attempts allowed (-1 for unlimited)"
+        },
+        {
+          "name": "shuffle_answers",
+          "type": "boolean",
+          "required": false,
+          "description": "Randomize answer order"
+        },
+        {
+          "name": "due_at",
+          "type": "string",
+          "required": false,
+          "description": "Due date in ISO 8601 format"
+        },
+        {
+          "name": "points_possible",
+          "type": "number",
+          "required": false,
+          "description": "Total points for the quiz"
+        },
+        {
+          "name": "published",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Whether to publish immediately (default: false)"
+        }
+      ],
+      "returns": "Created quiz details including ID and URL",
+      "examples": [
+        "Create a 30-minute quiz called 'Chapter 5 Review'",
+        "Add a practice quiz with unlimited attempts"
+      ]
+    },
+    {
+      "name": "update_quiz",
+      "category": "educator",
+      "description": "Update quiz settings",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Updated quiz details",
+      "examples": [
+        "Change quiz 789 time limit to 45 minutes",
+        "Update the midterm due date"
+      ],
+      "notes": "Accepts same optional settings as create_quiz (title, time_limit, due_at, etc.)"
+    },
+    {
+      "name": "delete_quiz",
+      "category": "educator",
+      "description": "Delete a quiz",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Confirmation of quiz deletion",
+      "examples": [
+        "Delete quiz 789 from BADM 350"
+      ]
+    },
+    {
+      "name": "publish_quiz",
+      "category": "educator",
+      "description": "Publish a quiz",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Confirmation of quiz published",
+      "examples": [
+        "Publish quiz 789"
+      ]
+    },
+    {
+      "name": "unpublish_quiz",
+      "category": "educator",
+      "description": "Unpublish a quiz",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Confirmation of quiz unpublished",
+      "examples": [
+        "Unpublish quiz 789"
+      ]
+    },
+    {
+      "name": "add_quiz_question",
+      "category": "educator",
+      "description": "Add a question to a quiz",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        },
+        {
+          "name": "question_type",
+          "type": "string",
+          "required": true,
+          "description": "One of: multiple_choice_question, true_false_question, short_answer_question, essay_question, etc."
+        },
+        {
+          "name": "question_text",
+          "type": "string",
+          "required": true,
+          "description": "The question text (HTML)"
+        },
+        {
+          "name": "points_possible",
+          "type": "number",
+          "required": false,
+          "description": "Points for this question"
+        },
+        {
+          "name": "answers",
+          "type": "array",
+          "required": false,
+          "description": "Array of answer objects with text and weight (100 for correct, 0 for incorrect)"
+        }
+      ],
+      "returns": "Created question details including ID",
+      "examples": [
+        "Add a multiple choice question worth 5 points",
+        "Add an essay question to quiz 789"
+      ]
+    },
+    {
+      "name": "get_quiz_statistics",
+      "category": "educator",
+      "description": "Get quiz performance analytics",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "Score distribution, question-level stats, and completion rates",
+      "examples": [
+        "Show me how students performed on quiz 789",
+        "What's the average score on the midterm?"
+      ]
+    },
+    {
+      "name": "list_quiz_submissions",
+      "category": "educator",
+      "description": "View quiz submissions and scores",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "quiz_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Quiz ID"
+        }
+      ],
+      "returns": "List of quiz submissions with student info, scores, and attempt details",
+      "examples": [
+        "Who has taken quiz 789?",
+        "Show me quiz submissions and scores"
+      ]
+    },
+    {
+      "name": "export_grades",
+      "category": "educator",
+      "description": "Export gradebook data as CSV or summary",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": false,
+          "default": "csv",
+          "description": "Export format: csv or summary"
+        }
+      ],
+      "returns": "Gradebook data in the requested format",
+      "examples": [
+        "Export grades for BADM 350 as CSV",
+        "Give me a grade summary for my course"
+      ]
+    },
+    {
+      "name": "get_assignment_groups",
+      "category": "educator",
+      "description": "List assignment groups (weighted grade categories)",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        }
+      ],
+      "returns": "List of assignment groups with IDs, names, weights, and rules",
+      "examples": [
+        "Show me the grade categories for BADM 350",
+        "What are the assignment group weights?"
+      ]
+    },
+    {
+      "name": "create_assignment_group",
+      "category": "educator",
+      "description": "Create a new assignment group",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "Group name (e.g., 'Homework', 'Exams')"
+        },
+        {
+          "name": "weight",
+          "type": "number",
+          "required": false,
+          "description": "Group weight percentage (e.g., 30 for 30%)"
+        },
+        {
+          "name": "position",
+          "type": "integer",
+          "required": false,
+          "description": "Display position in the gradebook"
+        },
+        {
+          "name": "drop_lowest",
+          "type": "integer",
+          "required": false,
+          "description": "Number of lowest scores to drop"
+        },
+        {
+          "name": "drop_highest",
+          "type": "integer",
+          "required": false,
+          "description": "Number of highest scores to drop"
+        }
+      ],
+      "returns": "Created assignment group details including ID",
+      "examples": [
+        "Create an 'Exams' group weighted at 40%",
+        "Add a 'Homework' category that drops the lowest 2 scores"
+      ]
+    },
+    {
+      "name": "update_assignment_group",
+      "category": "educator",
+      "description": "Update assignment group settings",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "group_id",
+          "type": "string | integer",
+          "required": true,
+          "description": "Assignment group ID"
+        }
+      ],
+      "returns": "Updated assignment group details",
+      "examples": [
+        "Change 'Homework' weight to 25%",
+        "Update the drop rules for the Quizzes group"
+      ],
+      "notes": "Accepts same optional settings as create_assignment_group (name, weight, position, drop_lowest, drop_highest)"
+    },
+    {
+      "name": "configure_late_policy",
+      "category": "educator",
+      "description": "Configure late and missing submission policies",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        }
+      ],
+      "returns": "Updated late policy configuration",
+      "examples": [
+        "Set a 10% per day late penalty",
+        "Configure missing submissions to receive 0 points"
+      ],
+      "notes": "Accepts optional policy params: late_submission_deduction, late_submission_deduction_enabled, late_submission_interval, late_submission_minimum_percent, missing_submission_deduction, missing_submission_deduction_enabled"
+    },
+    {
+      "name": "delete_announcements",
+      "category": "educator",
+      "description": "Smart announcement deletion with filtering and dry run",
+      "parameters": [
+        {
+          "name": "course_identifier",
+          "type": "string | integer",
+          "required": true,
+          "description": "Course code or Canvas ID"
+        },
+        {
+          "name": "announcement_id",
+          "type": "string | integer",
+          "required": false,
+          "description": "Single announcement ID to delete"
+        },
+        {
+          "name": "announcement_ids",
+          "type": "array",
+          "required": false,
+          "description": "Array of announcement IDs to delete"
+        },
+        {
+          "name": "title_contains",
+          "type": "string",
+          "required": false,
+          "description": "Delete announcements with title containing this string"
+        },
+        {
+          "name": "title_regex",
+          "type": "string",
+          "required": false,
+          "description": "Delete announcements matching this regex pattern"
+        },
+        {
+          "name": "older_than",
+          "type": "string",
+          "required": false,
+          "description": "Delete announcements older than this date (ISO 8601)"
+        },
+        {
+          "name": "newer_than",
+          "type": "string",
+          "required": false,
+          "description": "Delete announcements newer than this date (ISO 8601)"
+        },
+        {
+          "name": "dry_run",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "If true, preview what would be deleted without deleting"
+        }
+      ],
+      "returns": "List of deleted (or would-be-deleted) announcements",
+      "examples": [
+        "Delete all announcements containing 'test' (dry run first)",
+        "Remove announcements older than January 2025"
+      ],
+      "notes": "Use dry_run=true first to preview. Supports filtering by ID, title, regex, and date range."
     }
   ],
   "workflows": [
@@ -625,6 +1317,15 @@
       "steps": [
         "search_canvas_tools('bulk', 'signatures')",
         "execute_typescript(code_with_bulkGrade)"
+      ]
+    },
+    {
+      "name": "discussion_participation_grading",
+      "description": "Track and grade discussion participation",
+      "steps": [
+        "get_discussion_participation_summary(course_id, topic_id)",
+        "grade_discussion_participation(course_id, topic_id, assignment_id, dry_run=true)",
+        "grade_discussion_participation(course_id, topic_id, assignment_id, dry_run=false)"
       ]
     }
   ],

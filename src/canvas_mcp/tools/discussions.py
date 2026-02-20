@@ -896,416 +896,166 @@ def register_discussion_tools(mcp: FastMCP):
                f"Title: {announcement_title}\n" + \
                f"Created: {created_at}"
 
-    # ===== ANNOUNCEMENT DELETION TOOLS =====
+    # ===== ANNOUNCEMENT DELETION =====
 
     @mcp.tool()
     @validate_params
-    async def delete_announcement(
+    async def delete_announcements(
         course_identifier: str | int,
-        announcement_id: str | int
-    ) -> str:
-        """
-        Delete an announcement from a Canvas course.
-
-        Announcements are technically discussion topics in Canvas, so this uses
-        the discussion_topics endpoint to delete them.
-
-        Args:
-            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
-            announcement_id: The Canvas announcement/discussion topic ID to delete
-
-        Returns:
-            String describing the deletion result with status and title
-
-        Raises:
-            HTTPError:
-                - 401: User doesn't have permission to delete the announcement
-                - 404: Announcement not found in the specified course
-                - 403: Editing is restricted for this announcement
-
-        Example usage:
-            result = delete_announcement("60366", "925355")
-            print(f"Result: {result}")
-        """
-        course_id = await get_course_id(course_identifier)
-
-        # First, get the announcement details to return meaningful information
-        announcement = await make_canvas_request(
-            "get", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-        )
-
-        if "error" in announcement:
-            return f"Error fetching announcement details: {announcement['error']}"
-
-        announcement_title = announcement.get("title", "Unknown Title")
-
-        # Proceed with deletion
-        response = await make_canvas_request(
-            "delete", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-        )
-
-        if "error" in response:
-            return f"Error deleting announcement '{announcement_title}': {response['error']}"
-
-        course_display = await get_course_code(course_id) or course_identifier
-        return f"Announcement deleted successfully from course {course_display}:\n\n" + \
-               f"ID: {announcement_id}\n" + \
-               f"Title: {announcement_title}\n" + \
-               "Status: deleted\n" + \
-               "Message: Announcement deleted successfully"
-
-    @mcp.tool()
-    @validate_params
-    async def bulk_delete_announcements(
-        course_identifier: str | int,
-        announcement_ids: list[str | int],
-        stop_on_error: bool = False
-    ) -> str:
-        """
-        Delete multiple announcements from a Canvas course.
-
-        Args:
-            course_identifier: The Canvas course code or ID
-            announcement_ids: List of announcement IDs to delete
-            stop_on_error: If True, stop processing on first error; if False, continue with remaining
-
-        Returns:
-            String with detailed results including successful and failed deletions
-
-        Example usage:
-            results = bulk_delete_announcements(
-                "60366",
-                ["925355", "925354", "925353"],
-                stop_on_error=False
-            )
-        """
-        course_id = await get_course_id(course_identifier)
-
-        successful = []
-        failed = []
-
-        for announcement_id in announcement_ids:
-            try:
-                # Get announcement details first
-                announcement = await make_canvas_request(
-                    "get", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-                )
-
-                if "error" in announcement:
-                    failed.append({
-                        "id": str(announcement_id),
-                        "error": announcement["error"],
-                        "message": "Failed to fetch announcement details"
-                    })
-                    if stop_on_error:
-                        break
-                    continue
-
-                # Proceed with deletion
-                response = await make_canvas_request(
-                    "delete", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-                )
-
-                if "error" in response:
-                    failed.append({
-                        "id": str(announcement_id),
-                        "title": announcement.get("title", "Unknown Title"),
-                        "error": response["error"],
-                        "message": "Failed to delete announcement"
-                    })
-                    if stop_on_error:
-                        break
-                else:
-                    successful.append({
-                        "id": str(announcement_id),
-                        "title": announcement.get("title", "Unknown Title")
-                    })
-
-            except Exception as e:
-                failed.append({
-                    "id": str(announcement_id),
-                    "error": str(e),
-                    "message": "Unexpected error during deletion"
-                })
-                if stop_on_error:
-                    break
-
-        # Format results
-        summary = {
-            "total": len(announcement_ids),
-            "successful": len(successful),
-            "failed": len(failed)
-        }
-
-        course_display = await get_course_code(course_id) or course_identifier
-        result = f"Bulk deletion results for course {course_display}:\n\n"
-        result += f"Summary: {summary['successful']} successful, {summary['failed']} failed out of {summary['total']} total\n\n"
-
-        if successful:
-            result += "Successfully deleted:\n"
-            for item in successful:
-                result += f"  - ID: {item['id']}, Title: {item['title']}\n"
-            result += "\n"
-
-        if failed:
-            result += "Failed to delete:\n"
-            for item in failed:
-                result += f"  - ID: {item['id']}"
-                if 'title' in item:
-                    result += f", Title: {item['title']}"
-                result += f", Error: {item['error']}\n"
-
-        return result
-
-    @mcp.tool()
-    @validate_params
-    async def delete_announcement_with_confirmation(
-        course_identifier: str | int,
-        announcement_id: str | int,
-        require_title_match: str | None = None,
-        dry_run: bool = False
-    ) -> str:
-        """
-        Delete an announcement with optional safety checks.
-
-        Args:
-            course_identifier: The Canvas course code or ID
-            announcement_id: The announcement ID to delete
-            require_title_match: If provided, only delete if the announcement title matches exactly
-            dry_run: If True, verify but don't actually delete (for testing)
-
-        Returns:
-            String with operation result including status and title match information
-
-        Raises:
-            ValueError: If require_title_match is provided and doesn't match the actual title
-
-        Example usage:
-            # Delete only if title matches exactly (safety check)
-            result = delete_announcement_with_confirmation(
-                "60366",
-                "925355",
-                require_title_match="Preparing for the week",
-                dry_run=False
-            )
-        """
-        course_id = await get_course_id(course_identifier)
-
-        # First fetch the announcement details
-        announcement = await make_canvas_request(
-            "get", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-        )
-
-        if "error" in announcement:
-            return f"Error fetching announcement details: {announcement['error']}"
-
-        actual_title = announcement.get("title", "Unknown Title")
-        title_matched = True
-
-        # Check title match if required
-        if require_title_match is not None:
-            title_matched = actual_title == require_title_match
-            if not title_matched:
-                return f"Title mismatch - Expected: '{require_title_match}', Actual: '{actual_title}'. Deletion aborted for safety."
-
-        # Handle dry run
-        if dry_run:
-            course_display = await get_course_code(course_id) or course_identifier
-            result = f"DRY RUN - Would delete announcement from course {course_display}:\n\n"
-            result += f"ID: {announcement_id}\n"
-            result += f"Title: {actual_title}\n"
-            result += "Status: dry_run\n"
-            result += "Message: Announcement would be deleted (dry run mode)\n"
-            if require_title_match:
-                result += f"Title matched: {title_matched}\n"
-            return result
-
-        # Proceed with actual deletion
-        response = await make_canvas_request(
-            "delete", f"/courses/{course_id}/discussion_topics/{announcement_id}"
-        )
-
-        if "error" in response:
-            return f"Error deleting announcement '{actual_title}': {response['error']}"
-
-        course_display = await get_course_code(course_id) or course_identifier
-        result = f"Announcement deleted successfully from course {course_display}:\n\n"
-        result += f"ID: {announcement_id}\n"
-        result += f"Title: {actual_title}\n"
-        result += "Status: deleted\n"
-        result += "Message: Announcement deleted successfully\n"
-        if require_title_match:
-            result += f"Title matched: {title_matched}\n"
-
-        return result
-
-    @mcp.tool()
-    @validate_params
-    async def delete_announcements_by_criteria(
-        course_identifier: str | int,
-        criteria: dict,
+        announcement_ids: str | int | list | None = None,
+        title_contains: str | None = None,
+        title_regex: str | None = None,
+        older_than: str | None = None,
+        newer_than: str | None = None,
         limit: int | None = None,
         dry_run: bool = True
     ) -> str:
-        """
-        Delete announcements matching specific criteria.
+        """Delete announcements by ID(s) or filter criteria. Defaults to dry_run for safety.
+
+        Accepts a single ID, list of IDs, or filter criteria to find matching announcements.
+        Set dry_run=False to perform actual deletions.
 
         Args:
-            course_identifier: The Canvas course code or ID
-            criteria: Dict with search criteria:
-                - "title_contains": str - Delete if title contains this text
-                - "older_than": str - Delete if posted before this date (ISO format)
-                - "newer_than": str - Delete if posted after this date (ISO format)
-                - "title_regex": str - Delete if title matches regex pattern
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            announcement_ids: Single ID or list of IDs to delete (mutually exclusive with filters)
+            title_contains: Delete announcements whose title contains this text (case-insensitive)
+            title_regex: Delete announcements whose title matches this regex pattern
+            older_than: Delete announcements posted before this date (ISO 8601 format)
+            newer_than: Delete announcements posted after this date (ISO 8601 format)
             limit: Maximum number of announcements to delete (safety limit)
-            dry_run: If True, show what would be deleted without actually deleting
-
-        Returns:
-            String with operation results showing matched and deleted announcements
-
-        Example usage:
-            # Delete all announcements older than 30 days
-            from datetime import datetime, timedelta
-
-            results = delete_announcements_by_criteria(
-                "60366",
-                criteria={
-                    "older_than": (datetime.now() - timedelta(days=30)).isoformat(),
-                    "title_contains": "reminder"
-                },
-                limit=10,
-                dry_run=False
-            )
+            dry_run: If True (default), preview what would be deleted without actually deleting
         """
         course_id = await get_course_id(course_identifier)
+        course_display = await get_course_code(course_id) or course_identifier
 
-        # First list all announcements
-        params = {
-            "include[]": ["announcement"],
-            "only_announcements": True,
-            "per_page": 100
-        }
+        # Determine which announcements to target
+        targets: list[dict] = []
+        using_filters = any(f is not None for f in [title_contains, title_regex, older_than, newer_than])
 
-        announcements = await fetch_all_paginated_results(f"/courses/{course_id}/discussion_topics", params)
+        if announcement_ids is not None and not using_filters:
+            # Direct ID mode - normalize to list
+            if isinstance(announcement_ids, (str, int)):
+                id_list = [announcement_ids]
+            else:
+                id_list = announcement_ids
 
-        if isinstance(announcements, dict) and "error" in announcements:
-            return f"Error fetching announcements: {announcements['error']}"
+            for aid in id_list:
+                announcement = await make_canvas_request(
+                    "get", f"/courses/{course_id}/discussion_topics/{aid}"
+                )
+                if "error" in announcement:
+                    targets.append({"id": str(aid), "title": "Unknown", "error": announcement["error"]})
+                else:
+                    targets.append({
+                        "id": str(announcement.get("id", aid)),
+                        "title": announcement.get("title", "Untitled"),
+                        "posted_at": announcement.get("posted_at")
+                    })
 
-        if not announcements:
-            return f"No announcements found for course {course_identifier}."
+        elif using_filters:
+            # Filter mode - fetch all announcements then filter
+            params = {
+                "include[]": ["announcement"],
+                "only_announcements": True,
+                "per_page": 100
+            }
+            announcements = await fetch_all_paginated_results(
+                f"/courses/{course_id}/discussion_topics", params
+            )
 
-        # Filter based on criteria
-        matched = []
+            if isinstance(announcements, dict) and "error" in announcements:
+                return f"Error fetching announcements: {announcements['error']}"
 
-        for announcement in announcements:
-            match = True
-            announcement_title = announcement.get("title", "")
-            posted_at_str = announcement.get("posted_at")
+            if not announcements:
+                return f"No announcements found for course {course_display}."
 
-            # Check title_contains
-            if "title_contains" in criteria:
-                if criteria["title_contains"].lower() not in announcement_title.lower():
+            for announcement in announcements:
+                title = announcement.get("title", "")
+                posted_at_str = announcement.get("posted_at")
+                match = True
+
+                if title_contains and title_contains.lower() not in title.lower():
                     match = False
 
-            # Check title_regex
-            if "title_regex" in criteria and match:
-                try:
-                    if not re.search(criteria["title_regex"], announcement_title, re.IGNORECASE):
-                        match = False
-                except re.error:
-                    return f"Invalid regex pattern: {criteria['title_regex']}"
-
-            # Check date criteria
-            if posted_at_str and match:
-                try:
-                    posted_at = datetime.fromisoformat(posted_at_str.replace('Z', '+00:00'))
-
-                    if "older_than" in criteria:
-                        older_than = datetime.fromisoformat(criteria["older_than"].replace('Z', '+00:00'))
-                        if posted_at >= older_than:
+                if title_regex and match:
+                    try:
+                        if not re.search(title_regex, title, re.IGNORECASE):
                             match = False
+                    except re.error:
+                        return f"Invalid regex pattern: {title_regex}"
 
-                    if "newer_than" in criteria and match:
-                        newer_than = datetime.fromisoformat(criteria["newer_than"].replace('Z', '+00:00'))
-                        if posted_at <= newer_than:
-                            match = False
+                if posted_at_str and match:
+                    try:
+                        posted_at = datetime.fromisoformat(posted_at_str.replace('Z', '+00:00'))
+                        if older_than:
+                            cutoff = datetime.fromisoformat(older_than.replace('Z', '+00:00'))
+                            if posted_at >= cutoff:
+                                match = False
+                        if newer_than and match:
+                            cutoff = datetime.fromisoformat(newer_than.replace('Z', '+00:00'))
+                            if posted_at <= cutoff:
+                                match = False
+                    except ValueError as e:
+                        return f"Error parsing date: {e}"
 
-                except ValueError as e:
-                    return f"Error parsing date: {e}"
+                if match:
+                    targets.append({
+                        "id": str(announcement.get("id")),
+                        "title": title or "Untitled",
+                        "posted_at": posted_at_str
+                    })
 
-            if match:
-                matched.append(announcement)
+            if limit and len(targets) > limit:
+                targets = targets[:limit]
+        else:
+            return "Please provide announcement_ids or at least one filter criterion (title_contains, title_regex, older_than, newer_than)."
 
-        # Apply limit if specified
-        limit_reached = False
-        if limit and len(matched) > limit:
-            matched = matched[:limit]
-            limit_reached = True
+        if not targets:
+            return f"No announcements matched in course {course_display}."
 
-        course_display = await get_course_code(course_id) or course_identifier
-        result = f"Criteria-based deletion results for course {course_display}:\n\n"
-        result += f"Search criteria: {json.dumps(criteria, indent=2)}\n\n"
-        result += f"Matched {len(matched)} announcements"
-        if limit_reached:
-            result += f" (limited to {limit})"
-        result += "\n\n"
-
-        if not matched:
-            result += "No announcements matched the specified criteria."
-            return result
-
-        # Show what was matched
-        result += "Matched announcements:\n"
-        for announcement in matched:
-            result += f"  - ID: {announcement.get('id')}, Title: {announcement.get('title', 'Untitled')}, Posted: {format_date(announcement.get('posted_at'))}\n"
+        # Preview or delete
+        result = f"{'DRY RUN - ' if dry_run else ''}Announcement deletion for course {course_display}:\n\n"
+        result += f"Matched {len(targets)} announcement(s):\n"
+        for t in targets:
+            posted = format_date(t.get("posted_at")) if t.get("posted_at") else "N/A"
+            result += f"  - ID: {t['id']}, Title: {t['title']}, Posted: {posted}\n"
         result += "\n"
 
         if dry_run:
-            result += "DRY RUN: No announcements were actually deleted.\n"
+            result += "No announcements were deleted (dry_run=True).\n"
             result += "Set dry_run=False to perform actual deletions."
             return result
 
-        # Perform actual deletions
+        # Perform deletions
         deleted = []
         failed = []
 
-        for announcement in matched:
-            announcement_id = announcement.get("id")
+        for target in targets:
+            if "error" in target:
+                failed.append(target)
+                continue
             try:
                 response = await make_canvas_request(
-                    "delete", f"/courses/{course_id}/discussion_topics/{announcement_id}"
+                    "delete", f"/courses/{course_id}/discussion_topics/{target['id']}"
                 )
-
                 if "error" in response:
-                    failed.append({
-                        "id": str(announcement_id),
-                        "title": announcement.get("title", "Unknown Title"),
-                        "error": response["error"]
-                    })
+                    failed.append({**target, "error": response["error"]})
                 else:
-                    deleted.append({
-                        "id": str(announcement_id),
-                        "title": announcement.get("title", "Unknown Title")
-                    })
-
+                    deleted.append(target)
             except Exception as e:
-                failed.append({
-                    "id": str(announcement_id),
-                    "title": announcement.get("title", "Unknown Title"),
-                    "error": str(e)
-                })
+                failed.append({**target, "error": str(e)})
 
-        result += f"Deletion completed: {len(deleted)} successful, {len(failed)} failed\n\n"
+        result += f"Result: {len(deleted)} deleted, {len(failed)} failed\n\n"
 
         if deleted:
-            result += "Successfully deleted:\n"
+            result += "Deleted:\n"
             for item in deleted:
                 result += f"  - ID: {item['id']}, Title: {item['title']}\n"
             result += "\n"
 
         if failed:
-            result += "Failed to delete:\n"
+            result += "Failed:\n"
             for item in failed:
-                result += f"  - ID: {item['id']}, Title: {item['title']}, Error: {item['error']}\n"
+                result += f"  - ID: {item['id']}, Title: {item.get('title', 'Unknown')}, Error: {item['error']}\n"
 
         return result

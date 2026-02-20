@@ -49,6 +49,34 @@ Course management, grading, and analytics. Requires instructor/TA role.
 | `send_conversation` | Message students |
 | `send_peer_review_reminders` | Automated reminder workflow |
 | `create_announcement` | Post course announcements |
+| `delete_announcements` | Delete announcements (by ID, date range, or criteria) |
+| **Discussion Analytics** | |
+| `get_discussion_participation_summary` | Cross-reference students with entries; show who posted/replied/silent |
+| `grade_discussion_participation` | Auto-grade discussion participation based on posts and replies |
+| `export_discussion_data` | Export discussion data as CSV or summary |
+| **Search Helpers** | |
+| `find_assignment` | Search assignments by name (case-insensitive) |
+| `find_student` | Search students by name (case-insensitive) |
+| `find_discussion` | Search discussions by title (case-insensitive) |
+| **Quiz Management** | |
+| `list_quizzes` | List all quizzes in a course |
+| `get_quiz_details` | Get full quiz details |
+| `create_quiz` | Create a new quiz |
+| `update_quiz` | Update quiz settings |
+| `delete_quiz` | Delete a quiz |
+| `publish_quiz` / `unpublish_quiz` | Control quiz visibility |
+| `list_quiz_questions` | List quiz questions |
+| `add_quiz_question` | Add a question to a quiz |
+| `update_quiz_question` | Update a quiz question |
+| `delete_quiz_question` | Delete a quiz question |
+| `get_quiz_statistics` | Quiz performance analytics |
+| `list_quiz_submissions` | Quiz submissions |
+| **Gradebook Management** | |
+| `export_grades` | Export gradebook as CSV or summary |
+| `get_assignment_groups` | List weighted grade categories |
+| `create_assignment_group` | Create new grade category |
+| `update_assignment_group` | Update grade category settings |
+| `configure_late_policy` | Configure late/missing submission policies |
 
 ### Shared Tools (Students & Educators)
 Content access tools available to all authenticated users.
@@ -146,11 +174,11 @@ Is it a simple query?
 
 ### Educator: Discussion Participation
 ```
-1. "Show discussion posts for Topic 3"
-   → list_discussion_entries(course_id, topic_id)
+1. "Who hasn't participated in Topic 3?"
+   → get_discussion_participation_summary(course_id, topic_id)
 
-2. "Who hasn't participated?"
-   → Analyze entries to find missing students
+2. "Grade participation for Topic 3"
+   → grade_discussion_participation(course_id, topic_id, assignment_id, ...)
 
 3. "Post a reminder"
    → create_announcement(course_id, title, message)
@@ -163,6 +191,11 @@ Is it a simple query?
 - Submit grades with or without rubrics
 - Send Canvas messages and announcements
 - Create and manage rubrics
+- Manage quizzes and quiz questions
+- Auto-grade discussion participation
+- Export gradebook and discussion data
+- Configure late/missing submission policies
+- Search assignments, students, and discussions by name
 - Analyze peer review completion
 - Execute TypeScript for bulk operations
 - Access student data (with FERPA-compliant anonymization option)
