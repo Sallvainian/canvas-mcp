@@ -121,5 +121,117 @@ class TestRubricTools:
             assert len(result["criteria"]) == 1
 
 
+class TestBulkGradeFormData:
+    """Test build_bulk_grade_form_data helper."""
+
+    def test_simple_grades(self):
+        from canvas_mcp.tools.rubrics import build_bulk_grade_form_data
+        grades = {
+            "123": {"grade": 95, "comment": "Great work"},
+            "456": {"grade": "85%"}
+        }
+        result = build_bulk_grade_form_data(grades)
+        assert ("grade_data[123][posted_grade]", "95") in result
+        assert ("grade_data[123][text_comment]", "Great work") in result
+        assert ("grade_data[456][posted_grade]", "85%") in result
+
+    def test_excused(self):
+        from canvas_mcp.tools.rubrics import build_bulk_grade_form_data
+        grades = {"123": {"excused": True, "comment": "Absent"}}
+        result = build_bulk_grade_form_data(grades)
+        assert ("grade_data[123][excuse]", "true") in result
+        assert ("grade_data[123][text_comment]", "Absent") in result
+
+    def test_empty_grades(self):
+        from canvas_mcp.tools.rubrics import build_bulk_grade_form_data
+        result = build_bulk_grade_form_data({})
+        assert result == []
+
+    def test_excused_takes_precedence_over_grade(self):
+        from canvas_mcp.tools.rubrics import build_bulk_grade_form_data
+        grades = {"123": {"excused": True, "grade": 100}}
+        result = build_bulk_grade_form_data(grades)
+        keys = [k for k, v in result]
+        assert "grade_data[123][excuse]" in keys
+        assert "grade_data[123][posted_grade]" not in keys
+
+
+class TestPollCanvasProgress:
+    """Test progress polling utility."""
+
+    @pytest.mark.asyncio
+    async def test_immediate_completion(self):
+        with patch('canvas_mcp.core.client.make_canvas_request', new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "id": 42,
+                "workflow_state": "completed",
+                "completion": 100,
+                "message": "done"
+            }
+            from canvas_mcp.core.client import poll_canvas_progress
+            result = await poll_canvas_progress(42)
+            assert result["completed"] is True
+            assert result["workflow_state"] == "completed"
+            assert result["error"] is None
+
+    @pytest.mark.asyncio
+    async def test_failed_progress(self):
+        with patch('canvas_mcp.core.client.make_canvas_request', new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "id": 42,
+                "workflow_state": "failed",
+                "completion": 50,
+                "message": "Something went wrong"
+            }
+            from canvas_mcp.core.client import poll_canvas_progress
+            result = await poll_canvas_progress(42)
+            assert result["completed"] is True
+            assert result["workflow_state"] == "failed"
+            assert "Something went wrong" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_polling_then_complete(self):
+        call_count = 0
+
+        async def mock_request(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                return {"id": 42, "workflow_state": "running", "completion": 50}
+            return {"id": 42, "workflow_state": "completed", "completion": 100, "message": "done"}
+
+        with patch('canvas_mcp.core.client.make_canvas_request', side_effect=mock_request):
+            from canvas_mcp.core.client import poll_canvas_progress
+            result = await poll_canvas_progress(42, initial_interval=0.01, max_interval=0.02)
+            assert result["completed"] is True
+            assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_timeout(self):
+        async def mock_request(*args, **kwargs):
+            return {"id": 42, "workflow_state": "running", "completion": 25}
+
+        with patch('canvas_mcp.core.client.make_canvas_request', side_effect=mock_request):
+            from canvas_mcp.core.client import poll_canvas_progress
+            result = await poll_canvas_progress(
+                42, max_wait_seconds=0.05, initial_interval=0.01, max_interval=0.02
+            )
+            assert result["completed"] is False
+            assert result["workflow_state"] == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_url_parsing(self):
+        with patch('canvas_mcp.core.client.make_canvas_request', new_callable=AsyncMock) as mock_req:
+            mock_req.return_value = {
+                "id": 99,
+                "workflow_state": "completed",
+                "completion": 100,
+                "message": "done"
+            }
+            from canvas_mcp.core.client import poll_canvas_progress
+            await poll_canvas_progress("/api/v1/progress/99")
+            mock_req.assert_called_once_with("get", "/progress/99", skip_anonymization=True)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

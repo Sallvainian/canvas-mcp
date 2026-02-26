@@ -100,7 +100,7 @@ async def make_canvas_request(
     method: str,
     endpoint: str,
     params: dict[str, Any] | None = None,
-    data: dict[str, Any] | None = None,
+    data: dict[str, Any] | list[tuple[str, str]] | None = None,
     use_form_data: bool = False,
     skip_anonymization: bool = False
 ) -> Any:
@@ -336,3 +336,99 @@ async def fetch_all_paginated_results(
                 print(f"🔒 Applied {data_type} anonymization to paginated results from {endpoint}", file=sys.stderr)
 
     return all_results
+
+
+async def poll_canvas_progress(
+    progress_url: str | int,
+    *,
+    max_wait_seconds: float = 120.0,
+    initial_interval: float = 1.0,
+    max_interval: float = 5.0,
+) -> dict[str, Any]:
+    """Poll a Canvas Progress object until completion or timeout.
+
+    Canvas async operations (bulk grade updates, content migrations, etc.)
+    return a Progress object. This function polls until workflow_state
+    reaches 'completed' or 'failed', or until the timeout is exceeded.
+
+    Args:
+        progress_url: The Progress object URL (e.g., /api/v1/progress/123)
+                     or just the progress ID
+        max_wait_seconds: Maximum total time to wait (default: 120s)
+        initial_interval: Initial polling interval in seconds (default: 1s)
+        max_interval: Maximum polling interval in seconds (default: 5s)
+
+    Returns:
+        dict with keys: completed, workflow_state, completion, message,
+        progress_id, error
+    """
+    import time
+
+    # Handle both full URL and bare ID
+    if isinstance(progress_url, (int, float)):
+        endpoint = f"/progress/{int(progress_url)}"
+    elif str(progress_url).isdigit():
+        endpoint = f"/progress/{progress_url}"
+    elif "/api/v1/" in str(progress_url):
+        endpoint = str(progress_url).split("/api/v1", 1)[1]
+    elif str(progress_url).startswith("/"):
+        endpoint = str(progress_url)
+    else:
+        endpoint = f"/progress/{progress_url}"
+
+    progress_id = endpoint.rstrip("/").split("/")[-1]
+    start_time = time.monotonic()
+    interval = initial_interval
+
+    while True:
+        elapsed = time.monotonic() - start_time
+        if elapsed >= max_wait_seconds:
+            return {
+                "completed": False,
+                "workflow_state": "timeout",
+                "completion": 0,
+                "message": f"Polling timed out after {max_wait_seconds}s",
+                "progress_id": progress_id,
+                "error": f"Operation still in progress after {max_wait_seconds}s. "
+                         f"Check manually with GET /api/v1{endpoint}"
+            }
+
+        response = await make_canvas_request("get", endpoint, skip_anonymization=True)
+
+        if isinstance(response, dict) and "error" in response:
+            return {
+                "completed": False,
+                "workflow_state": "error",
+                "completion": 0,
+                "message": None,
+                "progress_id": progress_id,
+                "error": f"Failed to check progress: {response['error']}"
+            }
+
+        workflow_state = response.get("workflow_state", "unknown")
+        completion = response.get("completion", 0) or 0
+        message = response.get("message")
+
+        if workflow_state == "completed":
+            return {
+                "completed": True,
+                "workflow_state": "completed",
+                "completion": 100,
+                "message": message,
+                "progress_id": response.get("id"),
+                "error": None
+            }
+
+        if workflow_state == "failed":
+            return {
+                "completed": True,
+                "workflow_state": "failed",
+                "completion": completion,
+                "message": message,
+                "progress_id": response.get("id"),
+                "error": f"Bulk operation failed: {message or 'unknown error'}"
+            }
+
+        # Still running -- wait and retry
+        await asyncio.sleep(interval)
+        interval = min(interval * 1.5, max_interval)

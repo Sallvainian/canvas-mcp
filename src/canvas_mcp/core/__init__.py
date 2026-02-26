@@ -1,6 +1,6 @@
 """Core utilities for Canvas MCP server."""
 
-from .client import make_canvas_request, fetch_all_paginated_results, cleanup_http_client
+from .client import make_canvas_request, fetch_all_paginated_results, cleanup_http_client, poll_canvas_progress
 from .cache import get_course_id, get_course_code, refresh_course_cache
 from .validation import validate_params, validate_parameter, format_error, is_error_response
 from .dates import format_date, parse_date, truncate_text, format_date_smart, format_datetime_compact
@@ -28,6 +28,7 @@ __all__ = [
     'make_canvas_request',
     'fetch_all_paginated_results',
     'cleanup_http_client',
+    'poll_canvas_progress',
     'get_course_id',
     'get_course_code',
     'refresh_course_cache',
