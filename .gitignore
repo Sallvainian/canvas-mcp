@@ -51,7 +51,7 @@ gradebook.json
 # Student data and utility scripts
 student_anonymization_mapping.txt
 show_student_mappings.py
-/_**
+/_bmad/
 .aider*
 /test_*.py
 !tests/
