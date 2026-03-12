@@ -21,6 +21,7 @@ from .tools import (
     register_analytics_tools,
     register_assignment_tools,
     register_code_execution_tools,
+    register_content_migration_tools,
     register_course_tools,
     register_discovery_tools,
     register_discussion_analytics_tools,
@@ -72,6 +73,7 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_search_helper_tools(mcp)
     register_quiz_tools(mcp)
     register_gradebook_tools(mcp)
+    register_content_migration_tools(mcp)
 
     # Conditionally register student tools
     if user_type in ("all", "student"):

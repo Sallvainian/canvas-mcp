@@ -19,6 +19,7 @@ from .pages import register_page_tools
 from .analytics import register_analytics_tools
 from .search_helpers import register_search_helper_tools
 from .quizzes import register_quiz_tools
+from .content_migrations import register_content_migration_tools
 from .gradebook import register_gradebook_tools
 
 __all__ = [
@@ -41,5 +42,6 @@ __all__ = [
     'register_analytics_tools',
     'register_search_helper_tools',
     'register_quiz_tools',
-    'register_gradebook_tools'
+    'register_gradebook_tools',
+    'register_content_migration_tools'
 ]
