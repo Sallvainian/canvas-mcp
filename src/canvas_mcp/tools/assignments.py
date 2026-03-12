@@ -3,6 +3,7 @@
 import datetime
 import re
 from statistics import StatisticsError, mean, median, stdev
+from typing import Any
 
 import markdown as _markdown  # type: ignore[import-untyped]
 
@@ -632,7 +633,8 @@ def register_assignment_tools(mcp: FastMCP):
         assignment_id_str = str(assignment_id)
 
         params = {
-            "per_page": 100
+            "per_page": 100,
+            "include[]": "submission_comments"
         }
 
         submissions = await fetch_all_paginated_results(
@@ -669,7 +671,14 @@ def register_assignment_tools(mcp: FastMCP):
                 submitted_at = format_datetime_compact(submission.get("submitted_at"))
                 score = submission.get("score")
                 score_str = f"{score:.1f}" if score is not None else "-"
-                items.append(f"{user_id}|{submitted_at}|{score_str}")
+                late = "L" if submission.get("late") else ""
+                missing = "M" if submission.get("missing") else ""
+                attempt = submission.get("attempt") or 0
+                redo = "R" if submission.get("redo_request") else ""
+                flags = "".join(filter(None, [late, missing, redo]))
+                comments = submission.get("submission_comments", [])
+                comment_count = len(comments) if comments else 0
+                items.append(f"{user_id}|{submitted_at}|{score_str}|att:{attempt}|{flags}|c:{comment_count}")
 
             body = "\n".join(items)
             return format_response(header, body, v)
@@ -682,10 +691,33 @@ def register_assignment_tools(mcp: FastMCP):
                 submitted_at = submission.get("submitted_at", "Not submitted")
                 score = submission.get("score", "Not graded")
                 grade = submission.get("grade", "Not graded")
+                late = submission.get("late", False)
+                missing = submission.get("missing", False)
+                attempt = submission.get("attempt") or 0
+                redo_request = submission.get("redo_request", False)
+                late_policy = submission.get("late_policy_status") or "none"
+                comments = submission.get("submission_comments", [])
+                comment_count = len(comments) if comments else 0
 
-                submissions_info.append(
-                    f"User ID: {user_id}\nSubmitted: {submitted_at}\nScore: {score}\nGrade: {grade}\n"
-                )
+                lines = [
+                    f"User ID: {user_id}",
+                    f"Submitted: {submitted_at}",
+                    f"Score: {score}",
+                    f"Grade: {grade}",
+                    f"Attempt: {attempt}",
+                ]
+                if late:
+                    lines.append("Late: Yes")
+                if missing:
+                    lines.append("Missing: Yes")
+                if redo_request:
+                    lines.append("Redo Requested: Yes")
+                if late_policy != "none":
+                    lines.append(f"Late Policy: {late_policy}")
+                if comment_count > 0:
+                    lines.append(f"Comments: {comment_count}")
+                lines.append("")  # blank separator
+                submissions_info.append("\n".join(lines))
 
             return f"Submissions for Assignment {assignment_id} in course {course_display}:\n\n" + "\n".join(submissions_info)
 
@@ -759,6 +791,468 @@ def register_assignment_tools(mcp: FastMCP):
             has_content = True
 
         lines.append(f"Has Content: {'Yes' if has_content else 'No'}")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
+    @validate_params
+    async def get_submission_comments(
+        course_identifier: str | int,
+        assignment_id: str | int,
+        user_id: str | int
+    ) -> str:
+        """Get all comments on a specific student's submission.
+
+        Returns teacher comments, student comments, and peer review comments
+        with author info and timestamps.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_id: The Canvas assignment ID
+            user_id: The Canvas user ID of the student
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request(
+            "get",
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+            params={"include[]": "submission_comments"}
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error fetching submission comments: {response['error']}"
+
+        comments = response.get("submission_comments", [])
+
+        if not comments:
+            return f"No comments on submission for user {user_id} on assignment {assignment_id}."
+
+        lines = [f"Comments on submission (user {user_id}, assignment {assignment_id}):"]
+        lines.append(f"Total comments: {len(comments)}\n")
+
+        for c in comments:
+            author = c.get("author_name", "Unknown")
+            created = format_date(c.get("created_at"))
+            text = c.get("comment", "")
+            comment_id = c.get("id")
+            lines.append(f"[{comment_id}] {author} ({created}):")
+            lines.append(f"  {text}")
+            if c.get("attachments"):
+                att_names = [a.get("display_name", "file") for a in c["attachments"]]
+                lines.append(f"  Attachments: {', '.join(att_names)}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
+    @validate_params
+    async def post_submission_comment(
+        course_identifier: str | int,
+        assignment_id: str | int,
+        user_id: str | int,
+        comment_text: str,
+        group_comment: bool = False
+    ) -> str:
+        """Post a teacher comment on a student's submission without changing the grade.
+
+        Use this to leave feedback, ask for revisions, or communicate about the submission.
+        Does NOT affect the score or grade.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_id: The Canvas assignment ID
+            user_id: The Canvas user ID of the student
+            comment_text: The comment text to post
+            group_comment: If True, post comment to all group members (default False)
+        """
+        course_id = await get_course_id(course_identifier)
+
+        data = {
+            "comment": {
+                "text_comment": comment_text,
+            }
+        }
+        if group_comment:
+            data["comment"]["group_comment"] = "true"
+
+        response = await make_canvas_request(
+            "put",
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+            data=data
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error posting comment: {response['error']}"
+
+        return f"Comment posted successfully on submission (user {user_id}, assignment {assignment_id}).\nComment: {comment_text}"
+
+    @mcp.tool()
+    @validate_params
+    async def get_submission_history(
+        course_identifier: str | int,
+        assignment_id: str | int,
+        user_id: str | int
+    ) -> str:
+        """Get the full submission history showing all prior attempts for a student.
+
+        Shows when and how many times a student submitted/resubmitted, what changed
+        between attempts, and the content of each attempt.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_id: The Canvas assignment ID
+            user_id: The Canvas user ID of the student
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request(
+            "get",
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}",
+            params={"include[]": "submission_history"}
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error fetching submission history: {response['error']}"
+
+        history = response.get("submission_history", [])
+
+        if not history:
+            return f"No submission history found for user {user_id} on assignment {assignment_id}."
+
+        lines = [f"Submission History (user {user_id}, assignment {assignment_id}):"]
+        lines.append(f"Total attempts: {len(history)}\n")
+
+        for entry in history:
+            attempt_num = entry.get("attempt", "?")
+            submitted_at = format_date(entry.get("submitted_at"))
+            sub_type = entry.get("submission_type", "none")
+            score = entry.get("score")
+            body = entry.get("body")
+            url = entry.get("url")
+            attachments = entry.get("attachments", [])
+
+            lines.append(f"--- Attempt {attempt_num} ---")
+            lines.append(f"  Submitted: {submitted_at}")
+            lines.append(f"  Type: {sub_type}")
+            if score is not None:
+                lines.append(f"  Score: {score}")
+
+            if body:
+                preview = re.sub(r'<[^>]+>', '', body[:300]).strip()
+                lines.append(f"  Body ({len(body)} chars): {preview}...")
+            if url:
+                lines.append(f"  URL: {url}")
+            if attachments:
+                att_names = [f"{a.get('display_name', 'unnamed')} ({a.get('size', 0)} bytes)" for a in attachments]
+                lines.append(f"  Attachments: {', '.join(att_names)}")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
+    @validate_params
+    async def download_submission_attachment(
+        course_identifier: str | int,
+        assignment_id: str | int,
+        user_id: str | int,
+        attachment_id: str | int | None = None
+    ) -> str:
+        """Download and return the content of a text-based submission attachment.
+
+        For text files (txt, html, csv, py, etc.), returns the file content.
+        For binary files (pdf, docx, images), returns metadata only.
+        If attachment_id is not provided, returns the first attachment.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_id: The Canvas assignment ID
+            user_id: The Canvas user ID of the student
+            attachment_id: Optional specific attachment ID (default: first attachment)
+        """
+        import os
+
+        from ..core.client import _get_http_client
+
+        course_id = await get_course_id(course_identifier)
+
+        # First, get the submission to find attachments
+        response = await make_canvas_request(
+            "get",
+            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{user_id}"
+        )
+
+        if isinstance(response, dict) and "error" in response:
+            return f"Error fetching submission: {response['error']}"
+
+        attachments = response.get("attachments", [])
+        if not attachments:
+            return f"No attachments found on submission for user {user_id}, assignment {assignment_id}."
+
+        # Find the target attachment
+        target = None
+        if attachment_id:
+            attachment_id_int = int(attachment_id)
+            for att in attachments:
+                if att.get("id") == attachment_id_int:
+                    target = att
+                    break
+            if not target:
+                att_list = ", ".join(f"{a['id']} ({a.get('display_name', '?')})" for a in attachments)
+                return f"Attachment {attachment_id} not found. Available: {att_list}"
+        else:
+            target = attachments[0]
+
+        filename = target.get("display_name", "unknown")
+        content_type = target.get("content-type", "application/octet-stream")
+        size = target.get("size", 0)
+        download_url = target.get("url")
+
+        if not download_url:
+            return f"No download URL for attachment {filename}."
+
+        # Determine if this is a text file we can read
+        TEXT_TYPES = {"text/", "application/json", "application/csv", "application/xml",
+                      "application/javascript", "application/x-python"}
+        TEXT_EXTENSIONS = {".txt", ".html", ".htm", ".csv", ".json", ".xml", ".py",
+                          ".java", ".js", ".ts", ".css", ".md", ".yaml", ".yml", ".toml"}
+
+        is_text = any(content_type.startswith(t) for t in TEXT_TYPES)
+        if not is_text:
+            _, ext = os.path.splitext(filename)
+            is_text = ext.lower() in TEXT_EXTENSIONS
+
+        if not is_text:
+            # Binary file -- return metadata only
+            result_lines = [
+                f"Attachment: {filename}",
+                f"Size: {size} bytes ({size / 1024:.1f} KB)",
+                f"Content-Type: {content_type}",
+                f"Attachment ID: {target.get('id')}",
+                "",
+                "Binary file -- content cannot be displayed as text.",
+                "Use Canvas UI to download and view this file."
+            ]
+            return "\n".join(result_lines)
+
+        # Text file -- download content using authenticated client
+        client = _get_http_client()
+
+        try:
+            dl_response = await client.get(download_url, follow_redirects=True)
+            dl_response.raise_for_status()
+            text_content = dl_response.text
+
+            # Limit output size to prevent overwhelming the context
+            MAX_CHARS = 10000
+            truncated = len(text_content) > MAX_CHARS
+            if truncated:
+                text_content = text_content[:MAX_CHARS]
+
+            result_lines = [
+                f"Attachment: {filename}",
+                f"Size: {size} bytes",
+                f"Content-Type: {content_type}",
+                "",
+                "--- Content ---",
+                text_content,
+            ]
+            if truncated:
+                result_lines.append(f"\n... (truncated, showing first {MAX_CHARS} of {size} chars)")
+
+            return "\n".join(result_lines)
+
+        except Exception as e:
+            return f"Error downloading attachment {filename}: {str(e)}"
+
+    @mcp.tool()
+    @validate_params
+    async def list_ungraded_submissions(
+        course_identifier: str | int,
+        assignment_ids: list[str | int] | None = None
+    ) -> str:
+        """List all ungraded (submitted but not scored) submissions across assignments.
+
+        Useful for finding all work that still needs grading in a course.
+        Optionally filter to specific assignments.
+
+        Note: This tool does NOT catch students who resubmitted after being
+        graded as 0. Use list_resubmitted_after_grading for that case.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_ids: Optional list of assignment IDs to filter (default: all assignments)
+        """
+        from collections import defaultdict
+
+        course_id = await get_course_id(course_identifier)
+
+        params: dict[str, Any] = {
+            "student_ids[]": "all",
+            "workflow_state": "submitted",
+            "per_page": 100,
+        }
+
+        if assignment_ids:
+            params["assignment_ids[]"] = [str(aid) for aid in assignment_ids]
+
+        submissions = await fetch_all_paginated_results(
+            f"/courses/{course_id}/students/submissions",
+            params
+        )
+
+        if isinstance(submissions, dict) and "error" in submissions:
+            return f"Error fetching ungraded submissions: {submissions['error']}"
+
+        if not submissions:
+            return "No ungraded submissions found. All submitted work has been graded."
+
+        # Filter to only truly ungraded: submitted but score is None
+        ungraded = [
+            s for s in submissions
+            if s.get("workflow_state") in ("submitted", "pending_review")
+            and s.get("score") is None
+            and s.get("submitted_at") is not None
+        ]
+
+        if not ungraded:
+            return "No ungraded submissions found. All submitted work has been graded."
+
+        # Group by assignment for readability
+        by_assignment: dict[str, list] = defaultdict(list)
+        for s in ungraded:
+            aid = str(s.get("assignment_id", "unknown"))
+            by_assignment[aid].append(s)
+
+        course_display = await get_course_code(str(course_id)) or str(course_identifier)
+
+        lines = [f"Ungraded Submissions for {course_display}:"]
+        lines.append(f"Total ungraded: {len(ungraded)}\n")
+
+        for aid, subs in sorted(by_assignment.items()):
+            lines.append(f"Assignment {aid} ({len(subs)} ungraded):")
+            for s in subs:
+                user_id = s.get("user_id")
+                submitted_at = format_date(s.get("submitted_at"))
+                lines.append(f"  User {user_id} - submitted {submitted_at}")
+            lines.append("")
+
+        return "\n".join(lines)
+
+    @mcp.tool()
+    @validate_params
+    async def list_resubmitted_after_grading(
+        course_identifier: str | int,
+        assignment_ids: list[str | int] | None = None,
+        score_threshold: float = 0.0
+    ) -> str:
+        """Find submissions where a student resubmitted AFTER being graded.
+
+        Catches the common case where a student was graded as 0 (missing work),
+        then later submitted. Canvas marks these as workflow_state="graded" so
+        list_ungraded_submissions won't find them.
+
+        Detects resubmissions by comparing submitted_at vs graded_at timestamps.
+
+        Args:
+            course_identifier: The Canvas course code or ID
+            assignment_ids: Optional list of assignment IDs to filter (default: all assignments)
+            score_threshold: Only flag resubmissions where the current score is at or below
+                             this value (default: 0.0, meaning only zero-scored submissions)
+        """
+        from collections import defaultdict
+
+        course_id = await get_course_id(course_identifier)
+
+        # If no assignment_ids provided, fetch them first to query in batches
+        # (querying all graded submissions at once can exceed Canvas pagination limits)
+        if not assignment_ids:
+            assignments_resp = await fetch_all_paginated_results(
+                f"/courses/{course_id}/assignments",
+                {"per_page": 100}
+            )
+            if isinstance(assignments_resp, dict) and "error" in assignments_resp:
+                return f"Error fetching assignments: {assignments_resp['error']}"
+            assignment_ids = [a["id"] for a in assignments_resp if isinstance(a, dict) and "id" in a]
+
+        if not assignment_ids:
+            return "No assignments found in this course."
+
+        # Query both "graded" and "submitted" workflow states in batches
+        # Canvas sometimes keeps workflow_state="submitted" even after scoring
+        all_submissions: list[Any] = []
+        batch_size = 10
+        for workflow_state in ("graded", "submitted"):
+            for i in range(0, len(assignment_ids), batch_size):
+                batch = assignment_ids[i:i + batch_size]
+                params: dict[str, Any] = {
+                    "student_ids[]": "all",
+                    "workflow_state": workflow_state,
+                    "assignment_ids[]": [str(aid) for aid in batch],
+                    "per_page": 100,
+                }
+                submissions = await fetch_all_paginated_results(
+                    f"/courses/{course_id}/students/submissions",
+                    params
+                )
+                if isinstance(submissions, dict) and "error" in submissions:
+                    continue
+                if isinstance(submissions, list):
+                    all_submissions.extend(submissions)
+
+        if not all_submissions:
+            return "No submissions found."
+
+        # Find submissions that need re-review:
+        # Case 1: workflow_state="graded", submitted_at > graded_at (resubmitted after grading)
+        # Case 2: workflow_state="submitted", score is set and <= threshold (scored but not fully graded)
+        resubmitted = []
+        for s in all_submissions:
+            submitted_at = s.get("submitted_at")
+            graded_at = s.get("graded_at")
+            score = s.get("score")
+            state = s.get("workflow_state")
+
+            if not submitted_at or score is None or score > score_threshold:
+                continue
+
+            if state == "graded" and graded_at:
+                sub_dt = datetime.datetime.fromisoformat(submitted_at.replace("Z", "+00:00"))
+                grade_dt = datetime.datetime.fromisoformat(graded_at.replace("Z", "+00:00"))
+                if sub_dt > grade_dt:
+                    resubmitted.append(s)
+            elif state == "submitted" and score <= score_threshold:
+                # Scored but Canvas kept as "submitted" — needs review
+                resubmitted.append(s)
+
+        if not resubmitted:
+            return "No resubmissions found after grading."
+
+        try:
+            resubmitted = anonymize_response_data(resubmitted, data_type="submissions")
+        except Exception:
+            pass
+
+        # Group by assignment
+        by_assignment: dict[str, list] = defaultdict(list)
+        for s in resubmitted:
+            aid = str(s.get("assignment_id", "unknown"))
+            by_assignment[aid].append(s)
+
+        course_display = await get_course_code(str(course_id)) or str(course_identifier)
+
+        lines = [f"Resubmitted After Grading for {course_display}:"]
+        lines.append(f"Total found: {len(resubmitted)}\n")
+
+        for aid, subs in sorted(by_assignment.items()):
+            lines.append(f"Assignment {aid} ({len(subs)} resubmission{'s' if len(subs) != 1 else ''}):")
+            for s in subs:
+                user_id = s.get("user_id")
+                score = s.get("score")
+                graded = format_date(s.get("graded_at"))
+                submitted = format_date(s.get("submitted_at"))
+                lines.append(f"  User {user_id} - graded {score} on {graded}, resubmitted {submitted}")
+            lines.append("")
 
         return "\n".join(lines)
 
