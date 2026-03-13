@@ -6,20 +6,21 @@ course activity, assignment statistics, and generating reports.
 
 from mcp.server.fastmcp import FastMCP
 
+from ..core.anonymization import anonymize_response_data, generate_anonymous_id
 from ..core.cache import get_course_code, get_course_id
 from ..core.client import fetch_all_paginated_results, make_canvas_request
 from ..core.dates import format_date
+from ..core.logging import log_warning
 from ..core.validation import validate_params
 
 
-def register_analytics_tools(mcp: FastMCP):
+def register_analytics_tools(mcp: FastMCP) -> None:
     """Register all course analytics MCP tools."""
 
     @mcp.tool()
     @validate_params
     async def get_course_student_summaries(
-        course_identifier: str | int,
-        sort_by: str = "name"
+        course_identifier: str | int, sort_by: str = "name"
     ) -> str:
         """Get per-student engagement metrics for a course.
 
@@ -36,24 +37,24 @@ def register_analytics_tools(mcp: FastMCP):
 
         # Validate sort_by parameter
         valid_sort_options = [
-            "name", "name_descending",
-            "score", "score_descending",
-            "participations", "participations_descending",
-            "page_views", "page_views_descending"
+            "name",
+            "name_descending",
+            "score",
+            "score_descending",
+            "participations",
+            "participations_descending",
+            "page_views",
+            "page_views_descending",
         ]
         if sort_by not in valid_sort_options:
             return f"Error: Invalid sort_by option '{sort_by}'. Valid options: {', '.join(valid_sort_options)}"
 
-        params = {
-            "sort_column": sort_by.replace("_descending", ""),
-            "per_page": 100
-        }
+        params = {"sort_column": sort_by.replace("_descending", ""), "per_page": 100}
         if sort_by.endswith("_descending"):
             params["sort_order"] = "descending"
 
         students = await fetch_all_paginated_results(
-            f"/courses/{course_id}/analytics/student_summaries",
-            params
+            f"/courses/{course_id}/analytics/student_summaries", params
         )
 
         if isinstance(students, dict) and "error" in students:
@@ -79,7 +80,9 @@ def register_analytics_tools(mcp: FastMCP):
             late_count = tardiness.get("late", 0) or 0
             missing_count = tardiness.get("missing", 0) or 0
 
-            student_name = student.get("name", f"Student {student.get('id', 'Unknown')}")
+            student_name = student.get(
+                "name", f"Student {student.get('id', 'Unknown')}"
+            )
 
             if page_views == 0 and participations == 0:
                 no_activity.append(student_name)
@@ -87,11 +90,9 @@ def register_analytics_tools(mcp: FastMCP):
                 low_engagement.append(student_name)
 
             if missing_count > 2 or late_count > 3:
-                high_tardiness.append({
-                    "name": student_name,
-                    "late": late_count,
-                    "missing": missing_count
-                })
+                high_tardiness.append(
+                    {"name": student_name, "late": late_count, "missing": missing_count}
+                )
 
         # Build summary report
         course_display = await get_course_code(course_id) or course_identifier
@@ -102,9 +103,17 @@ def register_analytics_tools(mcp: FastMCP):
             f"Total Students: {total_students}",
             f"Total Page Views: {total_page_views}",
             f"Total Participations: {total_participations}",
-            f"Average Page Views per Student: {total_page_views / total_students:.1f}" if total_students > 0 else "",
-            f"Average Participations per Student: {total_participations / total_students:.1f}" if total_students > 0 else "",
-            ""
+            (
+                f"Average Page Views per Student: {total_page_views / total_students:.1f}"
+                if total_students > 0
+                else ""
+            ),
+            (
+                f"Average Participations per Student: {total_participations / total_students:.1f}"
+                if total_students > 0
+                else ""
+            ),
+            "",
         ]
 
         # Students needing attention
@@ -127,7 +136,9 @@ def register_analytics_tools(mcp: FastMCP):
         if high_tardiness:
             lines.append(f"⏰ Students with Tardiness Issues ({len(high_tardiness)}):")
             for s in high_tardiness[:10]:
-                lines.append(f"  - {s['name']}: {s['late']} late, {s['missing']} missing")
+                lines.append(
+                    f"  - {s['name']}: {s['late']} late, {s['missing']} missing"
+                )
             if len(high_tardiness) > 10:
                 lines.append(f"  ... and {len(high_tardiness) - 10} more")
             lines.append("")
@@ -146,8 +157,7 @@ def register_analytics_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def get_student_activity(
-        course_identifier: str | int,
-        student_id: str | int
+        course_identifier: str | int, student_id: str | int
     ) -> str:
         """Get hourly page views and participation data for a specific student.
 
@@ -160,8 +170,7 @@ def register_analytics_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/analytics/users/{student_id}/activity"
+            "get", f"/courses/{course_id}/analytics/users/{student_id}/activity"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -176,7 +185,7 @@ def register_analytics_tools(mcp: FastMCP):
 
         # Summarize page views
         total_views = 0
-        view_by_day = {}
+        view_by_day: dict[str, int] = {}
 
         if isinstance(page_views, dict):
             for date_str, count in page_views.items():
@@ -185,7 +194,10 @@ def register_analytics_tools(mcp: FastMCP):
                     # Extract day of week from date
                     try:
                         from datetime import datetime
-                        date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+
+                        date_obj = datetime.fromisoformat(
+                            date_str.replace("Z", "+00:00")
+                        )
                         day_name = date_obj.strftime("%A")
                         view_by_day[day_name] = view_by_day.get(day_name, 0) + count
                     except (ValueError, TypeError):
@@ -198,15 +210,12 @@ def register_analytics_tools(mcp: FastMCP):
             sorted_parts = sorted(
                 [p for p in participations if p.get("created_at")],
                 key=lambda x: x.get("created_at", ""),
-                reverse=True
+                reverse=True,
             )
             for p in sorted_parts[:10]:
                 created_at = format_date(p.get("created_at"))
                 url = p.get("url", "")
-                recent_participations.append({
-                    "date": created_at,
-                    "url": url
-                })
+                recent_participations.append({"date": created_at, "url": url})
 
         course_display = await get_course_code(course_id) or course_identifier
         lines = [
@@ -215,13 +224,15 @@ def register_analytics_tools(mcp: FastMCP):
             "",
             f"Total Page Views: {total_views}",
             f"Total Participations: {len(participations) if isinstance(participations, list) else 0}",
-            ""
+            "",
         ]
 
         if view_by_day:
             lines.append("Page Views by Day of Week:")
             # Sort by view count
-            for day, count in sorted(view_by_day.items(), key=lambda x: x[1], reverse=True):
+            for day, count in sorted(
+                view_by_day.items(), key=lambda x: x[1], reverse=True
+            ):
                 lines.append(f"  {day}: {count}")
             lines.append("")
 
@@ -244,8 +255,7 @@ def register_analytics_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def get_student_assignment_data(
-        course_identifier: str | int,
-        student_id: str | int
+        course_identifier: str | int, student_id: str | int
     ) -> str:
         """Get per-assignment grades and submission data for a specific student.
 
@@ -258,8 +268,7 @@ def register_analytics_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/analytics/users/{student_id}/assignments"
+            "get", f"/courses/{course_id}/analytics/users/{student_id}/assignments"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -297,43 +306,59 @@ def register_analytics_tools(mcp: FastMCP):
                         status = "⚠️ Late"
                         late_count += 1
 
-                    assignments_info.append({
-                        "title": title,
-                        "score": f"{score}/{points_possible}",
-                        "percent": f"{(score/points_possible*100):.1f}%" if points_possible > 0 else "N/A",
-                        "status": status,
-                        "submitted_at": format_date(submitted_at)
-                    })
+                    assignments_info.append(
+                        {
+                            "title": title,
+                            "score": f"{score}/{points_possible}",
+                            "percent": (
+                                f"{(score/points_possible*100):.1f}%"
+                                if points_possible > 0
+                                else "N/A"
+                            ),
+                            "status": status,
+                            "submitted_at": format_date(submitted_at),
+                        }
+                    )
                 elif submitted_at:
                     submitted_count += 1
-                    assignments_info.append({
-                        "title": title,
-                        "score": "Pending",
-                        "percent": "N/A",
-                        "status": "Submitted",
-                        "submitted_at": format_date(submitted_at)
-                    })
+                    assignments_info.append(
+                        {
+                            "title": title,
+                            "score": "Pending",
+                            "percent": "N/A",
+                            "status": "Submitted",
+                            "submitted_at": format_date(submitted_at),
+                        }
+                    )
                 else:
                     missing_count += 1
-                    assignments_info.append({
+                    assignments_info.append(
+                        {
+                            "title": title,
+                            "score": "---",
+                            "percent": "N/A",
+                            "status": "❌ Missing",
+                            "submitted_at": "N/A",
+                        }
+                    )
+            else:
+                missing_count += 1
+                assignments_info.append(
+                    {
                         "title": title,
                         "score": "---",
                         "percent": "N/A",
                         "status": "❌ Missing",
-                        "submitted_at": "N/A"
-                    })
-            else:
-                missing_count += 1
-                assignments_info.append({
-                    "title": title,
-                    "score": "---",
-                    "percent": "N/A",
-                    "status": "❌ Missing",
-                    "submitted_at": "N/A"
-                })
+                        "submitted_at": "N/A",
+                    }
+                )
 
         # Calculate overall grade
-        overall_percent = (total_points_earned / total_points_possible * 100) if total_points_possible > 0 else 0
+        overall_percent = (
+            (total_points_earned / total_points_possible * 100)
+            if total_points_possible > 0
+            else 0
+        )
 
         course_display = await get_course_code(course_id) or course_identifier
         lines = [
@@ -348,11 +373,13 @@ def register_analytics_tools(mcp: FastMCP):
             f"📊 Overall Grade: {total_points_earned:.1f}/{total_points_possible:.1f} ({overall_percent:.1f}%)",
             "",
             "Assignment Details:",
-            "-" * 40
+            "-" * 40,
         ]
 
         for a in assignments_info:
-            title_short = a["title"][:30] + "..." if len(a["title"]) > 30 else a["title"]
+            title_short = (
+                a["title"][:30] + "..." if len(a["title"]) > 30 else a["title"]
+            )
             lines.append(f"  {title_short}")
             lines.append(f"    Score: {a['score']} ({a['percent']}) {a['status']}")
             if a["submitted_at"] != "N/A":
@@ -364,8 +391,7 @@ def register_analytics_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def get_student_communication(
-        course_identifier: str | int,
-        student_id: str | int
+        course_identifier: str | int, student_id: str | int
     ) -> str:
         """Get messaging metrics between a student and the instructor.
 
@@ -378,8 +404,7 @@ def register_analytics_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/analytics/users/{student_id}/communication"
+            "get", f"/courses/{course_id}/analytics/users/{student_id}/communication"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -401,7 +426,7 @@ def register_analytics_tools(mcp: FastMCP):
             f"Messages from Instructor: {instructor_messages}",
             f"Messages from Student: {student_messages}",
             f"Total Messages: {instructor_messages + student_messages}",
-            ""
+            "",
         ]
 
         # Add communication assessment
@@ -421,7 +446,7 @@ def register_analytics_tools(mcp: FastMCP):
     async def get_course_activity(
         course_identifier: str | int,
         start_date: str | None = None,
-        end_date: str | None = None
+        end_date: str | None = None,
     ) -> str:
         """Get daily course participation broken down by category.
 
@@ -444,7 +469,7 @@ def register_analytics_tools(mcp: FastMCP):
         response = await make_canvas_request(
             "get",
             f"/courses/{course_id}/analytics/activity",
-            params=params if params else None
+            params=params if params else None,
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -454,12 +479,12 @@ def register_analytics_tools(mcp: FastMCP):
             return "No course activity data available."
 
         # Aggregate by category
-        category_totals = {}
+        category_totals: dict[str, int | float] = {}
         daily_totals = []
 
         for day_data in response:
             date = day_data.get("date", "Unknown")
-            day_total = 0
+            day_total: int | float = 0
 
             for category, count in day_data.items():
                 if category != "date" and isinstance(count, (int, float)):
@@ -474,26 +499,26 @@ def register_analytics_tools(mcp: FastMCP):
         total_activity = sum(category_totals.values())
 
         course_display = await get_course_code(course_id) or course_identifier
-        lines = [
-            f"Course Activity Analytics for {course_display}",
-            "=" * 50,
-            ""
-        ]
+        lines = [f"Course Activity Analytics for {course_display}", "=" * 50, ""]
 
         if start_date or end_date:
             date_range = f"{start_date or 'start'} to {end_date or 'present'}"
             lines.append(f"Date Range: {date_range}")
             lines.append("")
 
-        lines.extend([
-            f"Total Activity Events: {total_activity}",
-            f"Days with Activity: {len([d for d in daily_totals if d['total'] > 0])}",
-            ""
-        ])
+        lines.extend(
+            [
+                f"Total Activity Events: {total_activity}",
+                f"Days with Activity: {len([d for d in daily_totals if d['total'] > 0])}",
+                "",
+            ]
+        )
 
         if category_totals:
             lines.append("Activity by Category:")
-            for category, count in sorted(category_totals.items(), key=lambda x: x[1], reverse=True):
+            for category, count in sorted(
+                category_totals.items(), key=lambda x: x[1], reverse=True
+            ):
                 percentage = (count / total_activity * 100) if total_activity > 0 else 0
                 lines.append(f"  {category}: {count} ({percentage:.1f}%)")
             lines.append("")
@@ -509,18 +534,18 @@ def register_analytics_tools(mcp: FastMCP):
             recent = sorted(
                 [d for d in daily_totals if d["total"] > 0],
                 key=lambda x: x["date"],
-                reverse=True
+                reverse=True,
             )
             if recent:
-                lines.append(f"📅 Most Recent Activity: {recent[0]['date']} ({recent[0]['total']} events)")
+                lines.append(
+                    f"📅 Most Recent Activity: {recent[0]['date']} ({recent[0]['total']} events)"
+                )
 
         return "\n".join(lines)
 
     @mcp.tool()
     @validate_params
-    async def get_assignment_statistics(
-        course_identifier: str | int
-    ) -> str:
+    async def get_assignment_statistics(course_identifier: str | int) -> str:
         """Get grade distribution and timing statistics for all assignments.
 
         Returns per-assignment statistics including min/max/mean scores,
@@ -532,8 +557,7 @@ def register_analytics_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/analytics/assignments"
+            "get", f"/courses/{course_id}/analytics/assignments"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -570,21 +594,23 @@ def register_analytics_tools(mcp: FastMCP):
             total_submissions += total_for_assignment
             total_late += late
 
-            assignments_stats.append({
-                "title": title,
-                "points_possible": points_possible,
-                "due_at": format_date(due_at),
-                "min_score": min_score,
-                "max_score": max_score,
-                "median": median,
-                "first_quartile": first_quartile,
-                "third_quartile": third_quartile,
-                "on_time": on_time,
-                "late": late,
-                "missing": missing,
-                "floating": floating,
-                "total_submitted": total_for_assignment
-            })
+            assignments_stats.append(
+                {
+                    "title": title,
+                    "points_possible": points_possible,
+                    "due_at": format_date(due_at),
+                    "min_score": min_score,
+                    "max_score": max_score,
+                    "median": median,
+                    "first_quartile": first_quartile,
+                    "third_quartile": third_quartile,
+                    "on_time": on_time,
+                    "late": late,
+                    "missing": missing,
+                    "floating": floating,
+                    "total_submitted": total_for_assignment,
+                }
+            )
 
         course_display = await get_course_code(course_id) or course_identifier
         lines = [
@@ -593,32 +619,41 @@ def register_analytics_tools(mcp: FastMCP):
             "",
             f"Total Assignments: {len(assignments_stats)}",
             f"Total Submissions: {total_submissions}",
-            f"Late Submissions: {total_late} ({total_late/total_submissions*100:.1f}%)" if total_submissions > 0 else "Late Submissions: 0",
+            (
+                f"Late Submissions: {total_late} ({total_late/total_submissions*100:.1f}%)"
+                if total_submissions > 0
+                else "Late Submissions: 0"
+            ),
             "",
             "Per-Assignment Breakdown:",
-            "-" * 40
+            "-" * 40,
         ]
 
         for a in assignments_stats:
-            title_short = a["title"][:35] + "..." if len(a["title"]) > 35 else a["title"]
+            title_short = (
+                a["title"][:35] + "..." if len(a["title"]) > 35 else a["title"]
+            )
             lines.append(f"\n📝 {title_short}")
             lines.append(f"   Points: {a['points_possible']} | Due: {a['due_at']}")
 
             if a["median"] is not None:
-                lines.append(f"   Score Distribution:")
-                lines.append(f"     Min: {a['min_score']:.1f} | Q1: {a['first_quartile']:.1f} | Median: {a['median']:.1f} | Q3: {a['third_quartile']:.1f} | Max: {a['max_score']:.1f}")
+                lines.append("   Score Distribution:")
+                lines.append(
+                    f"     Min: {a['min_score']:.1f} | Q1: {a['first_quartile']:.1f} | Median: {a['median']:.1f} | Q3: {a['third_quartile']:.1f} | Max: {a['max_score']:.1f}"
+                )
             else:
                 lines.append("   Score Distribution: No graded submissions yet")
 
-            lines.append(f"   Submissions: {a['total_submitted']} on-time: {a['on_time']} | late: {a['late']} | missing: {a['missing']}")
+            lines.append(
+                f"   Submissions: {a['total_submitted']} on-time: {a['on_time']} | late: {a['late']} | missing: {a['missing']}"
+            )
 
         return "\n".join(lines)
 
     @mcp.tool()
     @validate_params
     async def start_course_report(
-        course_identifier: str | int,
-        report_type: str
+        course_identifier: str | int, report_type: str
     ) -> str:
         """Start generating an asynchronous course report.
 
@@ -638,7 +673,7 @@ def register_analytics_tools(mcp: FastMCP):
         valid_report_types = [
             "grade_export_csv",
             "student_assignment_outcome_map_csv",
-            "provisioning_csv"
+            "provisioning_csv",
         ]
         if report_type not in valid_report_types:
             return f"Error: Invalid report type '{report_type}'. Valid options: {', '.join(valid_report_types)}"
@@ -646,8 +681,7 @@ def register_analytics_tools(mcp: FastMCP):
         # Note: Course reports use a different endpoint structure
         # The /courses/{id}/reports endpoint allows starting reports
         response = await make_canvas_request(
-            "post",
-            f"/courses/{course_id}/reports/{report_type}"
+            "post", f"/courses/{course_id}/reports/{report_type}"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -672,7 +706,7 @@ def register_analytics_tools(mcp: FastMCP):
             "",
             f"Use get_report_status('{course_identifier}', '{report_type}', {report_id}) to check progress.",
             "",
-            "Note: Large reports may take several minutes to generate."
+            "Note: Large reports may take several minutes to generate.",
         ]
 
         return "\n".join(lines)
@@ -680,9 +714,7 @@ def register_analytics_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def get_report_status(
-        course_identifier: str | int,
-        report_type: str,
-        report_id: int
+        course_identifier: str | int, report_type: str, report_id: int
     ) -> str:
         """Check the status of a course report and get download URL when ready.
 
@@ -694,8 +726,7 @@ def register_analytics_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/reports/{report_type}/{report_id}"
+            "get", f"/courses/{course_id}/reports/{report_type}/{report_id}"
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -719,7 +750,7 @@ def register_analytics_tools(mcp: FastMCP):
             f"Status: {status}",
             f"Progress: {progress}%",
             f"Started: {created_at}",
-            ""
+            "",
         ]
 
         if status == "complete" and attachment:
@@ -727,24 +758,223 @@ def register_analytics_tools(mcp: FastMCP):
             filename = attachment.get("filename", "report.csv")
             file_size = attachment.get("size", 0)
 
-            lines.extend([
-                "✅ Report Complete!",
-                "",
-                f"Filename: {filename}",
-                f"Size: {file_size} bytes",
-                f"Download URL: {download_url}",
-                "",
-                "Note: Download URLs expire after a short time."
-            ])
+            lines.extend(
+                [
+                    "✅ Report Complete!",
+                    "",
+                    f"Filename: {filename}",
+                    f"Size: {file_size} bytes",
+                    f"Download URL: {download_url}",
+                    "",
+                    "Note: Download URLs expire after a short time.",
+                ]
+            )
         elif status == "running":
             lines.append("⏳ Report is still generating... Check back soon.")
         elif status == "error":
             message = response.get("message", "Unknown error")
-            lines.extend([
-                "❌ Report generation failed!",
-                f"Error: {message}"
-            ])
+            lines.extend(["❌ Report generation failed!", f"Error: {message}"])
         else:
             lines.append(f"Current status: {status}")
 
         return "\n".join(lines)
+
+    @mcp.tool()
+    async def get_anonymization_status() -> str:
+        """Get current data anonymization status and statistics.
+
+        Returns:
+            Status information about data anonymization
+        """
+        from ..core.anonymization import get_anonymization_stats
+        from ..core.config import get_config
+
+        config = get_config()
+        stats = get_anonymization_stats()
+
+        result = "Data Anonymization Status:\n\n"
+
+        if config.enable_data_anonymization:
+            result += "ANONYMIZATION ENABLED - Student data is protected\n\n"
+            result += "Session Statistics:\n"
+            result += (
+                f"  Total unique students anonymized: {stats['total_anonymized_ids']}\n"
+            )
+            result += f"  Privacy protection: {stats['privacy_status']}\n"
+            result += (
+                f"  Debug logging: {'ON' if config.anonymization_debug else 'OFF'}\n\n"
+            )
+
+            if stats["total_anonymized_ids"] > 0:
+                result += "Anonymous ID Examples:\n"
+                for i, (real_hint, anon_id) in enumerate(
+                    stats["sample_mappings"].items()
+                ):
+                    result += f"  {real_hint} -> {anon_id}\n"
+                    if i >= 2:
+                        break
+                result += "\n"
+
+            result += "FERPA Compliance: Data anonymized before AI processing\n"
+            result += "Data Location: All processing happens locally on your machine\n"
+
+        else:
+            result += "ANONYMIZATION DISABLED - Student data is NOT protected\n\n"
+            result += "PRIVACY RISK: Real student names and data sent to AI\n"
+            result += "COMPLIANCE: May violate FERPA requirements\n\n"
+            result += "Recommendation: Enable anonymization in your .env file:\n"
+            result += "   ENABLE_DATA_ANONYMIZATION=true\n"
+
+        return result
+
+    @mcp.tool()
+    async def get_student_analytics(
+        course_identifier: str,
+        current_only: bool = True,
+        include_participation: bool = True,
+        include_assignment_stats: bool = True,
+        include_access_stats: bool = True,
+    ) -> str:
+        """Get detailed analytics about student activity, participation, and progress in a course.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            current_only: Whether to include only assignments due on or before today
+            include_participation: Whether to include participation data (discussions, submissions)
+            include_assignment_stats: Whether to include assignment completion statistics
+            include_access_stats: Whether to include course access statistics
+        """
+        course_id = await get_course_id(course_identifier)
+
+        course_response = await make_canvas_request("get", f"/courses/{course_id}")
+        if "error" in course_response:
+            return f"Error fetching course: {course_response['error']}"
+
+        course_name = course_response.get("name", "Unknown Course")
+
+        students = await fetch_all_paginated_results(
+            f"/courses/{course_id}/users",
+            {"enrollment_type[]": "student", "per_page": 100},
+        )
+
+        if isinstance(students, dict) and "error" in students:
+            return f"Error fetching students: {students['error']}"
+
+        try:
+            students = anonymize_response_data(students, data_type="users")
+        except Exception as e:
+            log_warning(f"Failed to anonymize student analytics data: {str(e)}")
+
+        assignments = await fetch_all_paginated_results(
+            f"/courses/{course_id}/assignments", {"per_page": 100}
+        )
+
+        if isinstance(assignments, dict) and "error" in assignments:
+            assignments = []
+
+        course_display = await get_course_code(course_id) or course_identifier
+        output = f"Student Analytics for Course {course_display} ({course_name})\n\n"
+
+        output += f"Total Students: {len(students)}\n"
+        output += f"Total Assignments: {len(assignments)}\n\n"
+
+        if include_assignment_stats and assignments:
+            published_assignments = [
+                a for a in assignments if a.get("published", False)
+            ]
+            total_points = sum(
+                a.get("points_possible", 0) for a in published_assignments
+            )
+            output += f"Published Assignments: {len(published_assignments)}\n"
+            output += f"Total Points Available: {total_points}\n\n"
+
+        output += "This analytics feature provides basic course statistics.\n"
+        output += "For detailed individual student analytics, use specific assignment analytics tools."
+
+        return output
+
+    @mcp.tool()
+    @validate_params
+    async def create_student_anonymization_map(
+        course_identifier: str | int,
+    ) -> str:
+        """Create a local CSV file mapping real student data to anonymous IDs for a course.
+
+        This tool generates a de-anonymization key that allows faculty to identify students
+        from their anonymous IDs. The file is saved locally and should be kept secure.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+        """
+        import csv
+        from pathlib import Path
+
+        course_id = await get_course_id(course_identifier)
+
+        params = {
+            "enrollment_type[]": "student",
+            "include[]": ["email"],
+            "per_page": 100,
+        }
+
+        students = await fetch_all_paginated_results(
+            f"/courses/{course_id}/users", params, skip_anonymization=True
+        )
+
+        if isinstance(students, dict) and "error" in students:
+            return f"Error fetching students: {students['error']}"
+
+        if not students:
+            return f"No students found for course {course_identifier}."
+
+        maps_dir = Path("local_maps")
+        maps_dir.mkdir(exist_ok=True)
+
+        course_display = await get_course_code(course_id) or str(course_identifier)
+        safe_course_name = "".join(
+            c for c in course_display if c.isalnum() or c in ("-", "_")
+        )
+        filename = f"anonymization_map_{safe_course_name}.csv"
+        filepath = maps_dir / filename
+
+        mapping_data = []
+        for student in students:
+            real_id = student.get("id")
+            real_name = student.get("name", "Unknown")
+            real_email = student.get("email", "No email")
+            anonymous_id = generate_anonymous_id(real_id, prefix="Student")
+
+            mapping_data.append(
+                {
+                    "real_name": real_name,
+                    "real_id": real_id,
+                    "real_email": real_email,
+                    "anonymous_id": anonymous_id,
+                }
+            )
+
+        try:
+            with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
+                fieldnames = ["real_name", "real_id", "real_email", "anonymous_id"]
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(mapping_data)
+
+            result = "Student anonymization map created successfully!\n\n"
+            result += f"File location: {filepath}\n"
+            result += f"Students mapped: {len(mapping_data)}\n"
+            result += f"Course: {course_display}\n\n"
+            result += "SECURITY WARNING:\n"
+            result += (
+                "This file contains sensitive student information and should be:\n"
+            )
+            result += "- Kept secure and not shared\n"
+            result += "- Deleted when no longer needed\n"
+            result += "- Never committed to version control\n\n"
+            result += "File format: CSV with columns real_name, real_id, real_email, anonymous_id\n"
+            result += "Use this file to identify students from their anonymous IDs in tool outputs."
+
+            return result
+
+        except Exception as e:
+            return f"Error creating anonymization map: {str(e)}"

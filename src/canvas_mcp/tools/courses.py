@@ -27,30 +27,30 @@ def strip_html_tags(html_content: str) -> str:
         return ""
 
     # Remove HTML tags
-    clean_text = re.sub(r'<[^>]+>', '', html_content)
+    clean_text = re.sub(r"<[^>]+>", "", html_content)
 
     # Replace common HTML entities
-    clean_text = clean_text.replace('&nbsp;', ' ')
-    clean_text = clean_text.replace('&amp;', '&')
-    clean_text = clean_text.replace('&lt;', '<')
-    clean_text = clean_text.replace('&gt;', '>')
-    clean_text = clean_text.replace('&quot;', '"')
+    clean_text = clean_text.replace("&nbsp;", " ")
+    clean_text = clean_text.replace("&amp;", "&")
+    clean_text = clean_text.replace("&lt;", "<")
+    clean_text = clean_text.replace("&gt;", ">")
+    clean_text = clean_text.replace("&quot;", '"')
 
     # Clean up whitespace
-    clean_text = re.sub(r'\s+', ' ', clean_text)
+    clean_text = re.sub(r"\s+", " ", clean_text)
     clean_text = clean_text.strip()
 
     return clean_text
 
 
-def register_course_tools(mcp: FastMCP):
+def register_course_tools(mcp: FastMCP) -> None:
     """Register all course-related MCP tools."""
 
     @mcp.tool()
     async def list_courses(
         include_concluded: bool = False,
         include_all: bool = False,
-        verbosity: str | None = None
+        verbosity: str | None = None,
     ) -> str:
         """List courses for the authenticated user.
 
@@ -68,10 +68,7 @@ def register_course_tools(mcp: FastMCP):
         else:
             v = get_verbosity()
 
-        params = {
-            "include[]": ["term", "teachers", "total_students"],
-            "per_page": 100
-        }
+        params = {"include[]": ["term", "teachers", "total_students"], "per_page": 100}
 
         if not include_all:
             params["enrollment_type"] = "teacher"
@@ -152,7 +149,7 @@ def register_course_tools(mcp: FastMCP):
             f"Time Zone: {response.get('time_zone', 'N/A')}",
             f"Default View: {response.get('default_view', 'N/A')}",
             f"Public: {response.get('is_public', False)}",
-            f"Blueprint: {response.get('blueprint', False)}"
+            f"Blueprint: {response.get('blueprint', False)}",
         ]
 
         # Prefer to show course code in the output
@@ -161,10 +158,12 @@ def register_course_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
-    async def get_course_content_overview(course_identifier: str | int,
-                                        include_pages: bool = True,
-                                        include_modules: bool = True,
-                                        include_syllabus: bool = True) -> str:
+    async def get_course_content_overview(
+        course_identifier: str | int,
+        include_pages: bool = True,
+        include_modules: bool = True,
+        include_syllabus: bool = True,
+    ) -> str:
         """Get a comprehensive overview of course content including pages, modules, and syllabus.
 
         Args:
@@ -185,7 +184,9 @@ def register_course_tools(mcp: FastMCP):
 
         # Get pages if requested
         if include_pages:
-            pages = await fetch_all_paginated_results(f"/courses/{course_id}/pages", {"per_page": 100})
+            pages = await fetch_all_paginated_results(
+                f"/courses/{course_id}/pages", {"per_page": 100}
+            )
             if isinstance(pages, list):
                 published_pages = [p for p in pages if p.get("published", False)]
                 unpublished_pages = [p for p in pages if not p.get("published", False)]
@@ -196,15 +197,17 @@ def register_course_tools(mcp: FastMCP):
                     f"  Total Pages: {len(pages)}",
                     f"  Published: {len(published_pages)}",
                     f"  Unpublished: {len(unpublished_pages)}",
-                    f"  Front Pages: {len(front_pages)}"
+                    f"  Front Pages: {len(front_pages)}",
                 ]
 
                 if published_pages:
                     pages_summary.append("\nRecent Published Pages:")
                     # Sort by updated_at and show first 5
-                    sorted_pages = sorted(published_pages,
-                                        key=lambda x: x.get("updated_at", ""),
-                                        reverse=True)
+                    sorted_pages = sorted(
+                        published_pages,
+                        key=lambda x: x.get("updated_at", ""),
+                        reverse=True,
+                    )
                     for page in sorted_pages[:5]:
                         title = page.get("title", "Untitled")
                         updated = format_date(page.get("updated_at"))
@@ -214,29 +217,35 @@ def register_course_tools(mcp: FastMCP):
 
         # Get modules if requested
         if include_modules:
-            modules = await fetch_all_paginated_results(f"/courses/{course_id}/modules", {"per_page": 100})
+            modules = await fetch_all_paginated_results(
+                f"/courses/{course_id}/modules", {"per_page": 100}
+            )
             if isinstance(modules, list):
                 modules_summary = [
                     "\nModules Summary:",
-                    f"  Total Modules: {len(modules)}"
+                    f"  Total Modules: {len(modules)}",
                 ]
 
                 # Count module items by type across all modules
-                item_type_counts = {}
+                item_type_counts: dict[str, int] = {}
                 total_items = 0
 
-                for module in modules[:10]:  # Limit to first 10 modules to avoid too many API calls
+                for module in modules[
+                    :10
+                ]:  # Limit to first 10 modules to avoid too many API calls
                     module_id = module.get("id")
                     if module_id:
                         items = await fetch_all_paginated_results(
                             f"/courses/{course_id}/modules/{module_id}/items",
-                            {"per_page": 100}
+                            {"per_page": 100},
                         )
                         if isinstance(items, list):
                             total_items += len(items)
                             for item in items:
                                 item_type = item.get("type", "Unknown")
-                                item_type_counts[item_type] = item_type_counts.get(item_type, 0) + 1
+                                item_type_counts[item_type] = (
+                                    item_type_counts.get(item_type, 0) + 1
+                                )
 
                 modules_summary.append(f"  Total Items Analyzed: {total_items}")
                 if item_type_counts:
@@ -258,13 +267,11 @@ def register_course_tools(mcp: FastMCP):
         if include_syllabus:
             # Fetch the course details with syllabus_body included
             course_with_syllabus = await make_canvas_request(
-                "get",
-                f"/courses/{course_id}",
-                params={"include[]": "syllabus_body"}
+                "get", f"/courses/{course_id}", params={"include[]": "syllabus_body"}
             )
 
             if "error" not in course_with_syllabus:
-                syllabus_body = course_with_syllabus.get('syllabus_body', '')
+                syllabus_body = course_with_syllabus.get("syllabus_body", "")
 
                 if syllabus_body:
                     # Clean the HTML content
@@ -277,16 +284,26 @@ def register_course_tools(mcp: FastMCP):
                     syllabus_summary = [
                         "\nSyllabus Content:",
                         # Indent the content
-                        "\n".join([f"  {line}" for line in clean_syllabus.split('\n') if line.strip()])
+                        "\n".join(
+                            [
+                                f"  {line}"
+                                for line in clean_syllabus.split("\n")
+                                if line.strip()
+                            ]
+                        ),
                     ]
 
                     overview_sections.append("\n".join(syllabus_summary))
                 else:
-                    overview_sections.append("\nSyllabus Content: No syllabus content found")
+                    overview_sections.append(
+                        "\nSyllabus Content: No syllabus content found"
+                    )
             else:
                 overview_sections.append("\nSyllabus Content: Error fetching syllabus")
         # Try to get the course code for display
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"Content Overview for Course {course_display}:" + "\n".join(overview_sections)
+        result = f"Content Overview for Course {course_display}:" + "\n".join(
+            overview_sections
+        )
 
         return result

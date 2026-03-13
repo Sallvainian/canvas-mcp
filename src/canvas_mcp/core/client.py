@@ -1,13 +1,13 @@
 """HTTP client and Canvas API utilities."""
 
 import asyncio
-import sys
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 
 from .anonymization import anonymize_response_data
+from .logging import log_debug, log_error, log_info
 
 # Rate limit retry configuration
 MAX_RETRIES = 3
@@ -21,69 +21,73 @@ def _determine_data_type(endpoint: str) -> str:
     """Determine the type of data based on the API endpoint."""
     endpoint_lower = endpoint.lower()
 
-    if '/users' in endpoint_lower:
-        return 'users'
-    elif '/discussion_topics' in endpoint_lower and '/entries' in endpoint_lower:
-        return 'discussions'
-    elif '/discussion' in endpoint_lower:
-        return 'discussions'
-    elif '/submissions' in endpoint_lower:
-        return 'submissions'
-    elif '/assignments' in endpoint_lower:
-        return 'assignments'
-    elif '/enrollments' in endpoint_lower:
-        return 'users'  # Enrollments contain user data
+    if "/users" in endpoint_lower:
+        return "users"
+    elif "/discussion_topics" in endpoint_lower and "/entries" in endpoint_lower:
+        return "discussions"
+    elif "/discussion" in endpoint_lower:
+        return "discussions"
+    elif "/submissions" in endpoint_lower:
+        return "submissions"
+    elif "/assignments" in endpoint_lower:
+        return "assignments"
+    elif "/enrollments" in endpoint_lower:
+        return "users"  # Enrollments contain user data
     else:
-        return 'general'
+        return "general"
 
 
 def _should_anonymize_endpoint(endpoint: str) -> bool:
     """Determine if an endpoint should have its data anonymized."""
     # Don't anonymize these endpoints as they don't contain student data
     safe_endpoints = [
-        '/courses',  # Course info without student data (unless it includes users)
-        '/self',     # User's own profile
-        '/accounts', # Account information
-        '/terms',    # Academic terms
+        "/courses",  # Course info without student data (unless it includes users)
+        "/self",  # User's own profile
+        "/accounts",  # Account information
+        "/terms",  # Academic terms
     ]
 
     endpoint_lower = endpoint.lower()
 
     # Always anonymize discussion entries as they contain student posts
-    if '/discussion_topics' in endpoint_lower and '/entries' in endpoint_lower:
+    if "/discussion_topics" in endpoint_lower and "/entries" in endpoint_lower:
         return True
 
     # Check if it's a safe endpoint
     for safe in safe_endpoints:
-        if safe in endpoint_lower and '/users' not in endpoint_lower:
+        if safe in endpoint_lower and "/users" not in endpoint_lower:
             return False
 
     # Anonymize endpoints that contain student data
     student_data_endpoints = [
-        '/users',
-        '/discussion',
-        '/submissions',
-        '/enrollments',
-        '/groups',
-        '/analytics'
+        "/users",
+        "/discussion",
+        "/submissions",
+        "/enrollments",
+        "/groups",
+        "/analytics",
     ]
 
-    return any(student_endpoint in endpoint_lower for student_endpoint in student_data_endpoints)
+    return any(
+        student_endpoint in endpoint_lower
+        for student_endpoint in student_data_endpoints
+    )
 
 
 def _get_http_client() -> httpx.AsyncClient:
     """Get or create the HTTP client with current configuration."""
     global http_client
     if http_client is None:
-        from .config import get_config
         from .. import __version__
+        from .config import get_config
+
         config = get_config()
         http_client = httpx.AsyncClient(
             headers={
-                'Authorization': f'Bearer {config.api_token}',
-                'User-Agent': f'canvas-mcp/{__version__} (https://github.com/vishalsachdev/canvas-mcp)'
+                "Authorization": f"Bearer {config.api_token}",
+                "User-Agent": f"canvas-mcp/{__version__} (https://github.com/vishalsachdev/canvas-mcp)",
             },
-            timeout=config.api_timeout
+            timeout=config.api_timeout,
         )
     return http_client
 
@@ -102,7 +106,7 @@ async def make_canvas_request(
     params: dict[str, Any] | None = None,
     data: dict[str, Any] | list[tuple[str, str]] | None = None,
     use_form_data: bool = False,
-    skip_anonymization: bool = False
+    skip_anonymization: bool = False,
 ) -> Any:
     """Make a request to the Canvas API with proper error handling.
 
@@ -118,11 +122,12 @@ async def make_canvas_request(
     """
 
     from .config import get_config
+
     config = get_config()
     client = _get_http_client()
 
     # Ensure the endpoint starts with a slash
-    if not endpoint.startswith('/'):
+    if not endpoint.startswith("/"):
         endpoint = f"/{endpoint}"
 
     # Construct the full URL
@@ -134,7 +139,7 @@ async def make_canvas_request(
             # Log the request for debugging (if enabled)
             if config.log_api_requests:
                 retry_info = f" (retry {attempt}/{MAX_RETRIES})" if attempt > 0 else ""
-                print(f"Making {method.upper()} request to {url}{retry_info}", file=sys.stderr)
+                log_debug(f"Making {method.upper()} request to {url}{retry_info}")
 
             if method.lower() == "get":
                 response = await client.get(url, params=params)
@@ -147,7 +152,9 @@ async def make_canvas_request(
                         response = await client.post(
                             url,
                             content=encoded,
-                            headers={"Content-Type": "application/x-www-form-urlencoded"}
+                            headers={
+                                "Content-Type": "application/x-www-form-urlencoded"
+                            },
                         )
                     else:
                         response = await client.post(url, data=data)
@@ -161,7 +168,9 @@ async def make_canvas_request(
                         response = await client.put(
                             url,
                             content=encoded,
-                            headers={"Content-Type": "application/x-www-form-urlencoded"}
+                            headers={
+                                "Content-Type": "application/x-www-form-urlencoded"
+                            },
                         )
                     else:
                         response = await client.put(url, data=data)
@@ -177,13 +186,17 @@ async def make_canvas_request(
 
             # Apply anonymization if enabled and this endpoint contains student data
             # Skip if explicitly requested (e.g., from paginated fetcher that will anonymize the full result)
-            if not skip_anonymization and config.enable_data_anonymization and _should_anonymize_endpoint(endpoint):
+            if (
+                not skip_anonymization
+                and config.enable_data_anonymization
+                and _should_anonymize_endpoint(endpoint)
+            ):
                 data_type = _determine_data_type(endpoint)
                 result = anonymize_response_data(result, data_type)
 
                 # Log anonymization for debugging (if enabled)
                 if config.anonymization_debug:
-                    print(f"🔒 Applied {data_type} anonymization to {endpoint}", file=sys.stderr)
+                    log_info(f"Applied {data_type} anonymization to {endpoint}")
 
             return result
 
@@ -191,16 +204,18 @@ async def make_canvas_request(
             # Handle rate limiting with exponential backoff
             if e.response.status_code == 429 and attempt < MAX_RETRIES:
                 # Check for Retry-After header
-                retry_after = e.response.headers.get('Retry-After')
+                retry_after = e.response.headers.get("Retry-After")
                 if retry_after:
                     try:
                         wait_time = int(retry_after)
                     except ValueError:
-                        wait_time = INITIAL_BACKOFF_SECONDS * (2 ** attempt)
+                        wait_time = INITIAL_BACKOFF_SECONDS * (2**attempt)
                 else:
-                    wait_time = INITIAL_BACKOFF_SECONDS * (2 ** attempt)
+                    wait_time = INITIAL_BACKOFF_SECONDS * (2**attempt)
 
-                print(f"⏳ Rate limited (429). Retrying in {wait_time}s... (attempt {attempt + 1}/{MAX_RETRIES})", file=sys.stderr)
+                log_debug(
+                    f"Rate limited (429). Retrying in {wait_time}s... (attempt {attempt + 1}/{MAX_RETRIES})"
+                )
                 await asyncio.sleep(wait_time)
                 continue
 
@@ -213,11 +228,11 @@ async def make_canvas_request(
                 error_details = e.response.text
                 error_message += f", Text: {error_details}"
 
-            print(f"API error: {error_message}", file=sys.stderr)
+            log_error(f"API error: {error_message}")
             return {"error": error_message}
 
         except Exception as e:
-            print(f"Request failed: {str(e)}", file=sys.stderr)
+            log_error(f"Request failed: {str(e)}")
             return {"error": f"Request failed: {str(e)}"}
 
     # Should never reach here, but just in case
@@ -274,14 +289,19 @@ async def upload_file_multipart(
                     return confirm.json()
                 return {"error": "Redirect with no Location header"}
 
-            return {"error": f"Upload failed with status {response.status_code}: {response.text}"}
+            return {
+                "error": f"Upload failed with status {response.status_code}: {response.text}"
+            }
 
     except Exception as e:
         return {"error": f"File upload failed: {str(e)}"}
 
 
 async def fetch_all_paginated_results(
-    endpoint: str, params: dict[str, Any] | None = None, *, skip_anonymization: bool = False
+    endpoint: str,
+    params: dict[str, Any] | None = None,
+    *,
+    skip_anonymization: bool = False,
 ) -> Any:
     """Fetch all results from a paginated Canvas API endpoint.
 
@@ -306,10 +326,12 @@ async def fetch_all_paginated_results(
     while True:
         current_params = {**params, "page": page}
         # Skip anonymization on individual pages - we'll anonymize the complete dataset
-        response = await make_canvas_request("get", endpoint, params=current_params, skip_anonymization=True)
+        response = await make_canvas_request(
+            "get", endpoint, params=current_params, skip_anonymization=True
+        )
 
         if isinstance(response, dict) and "error" in response:
-            print(f"Error fetching page {page}: {response['error']}", file=sys.stderr)
+            log_error(f"Error fetching page {page}: {response['error']}")
             return response
 
         if not response or not isinstance(response, list) or len(response) == 0:
@@ -326,6 +348,7 @@ async def fetch_all_paginated_results(
     # Apply anonymization to the complete result set if needed (unless explicitly skipped)
     if not skip_anonymization:
         from .config import get_config
+
         config = get_config()
 
         if config.enable_data_anonymization and _should_anonymize_endpoint(endpoint):
@@ -333,7 +356,9 @@ async def fetch_all_paginated_results(
             all_results = anonymize_response_data(all_results, data_type)
 
             if config.anonymization_debug:
-                print(f"🔒 Applied {data_type} anonymization to paginated results from {endpoint}", file=sys.stderr)
+                log_info(
+                    f"Applied {data_type} anonymization to paginated results from {endpoint}"
+                )
 
     return all_results
 
@@ -390,7 +415,7 @@ async def poll_canvas_progress(
                 "message": f"Polling timed out after {max_wait_seconds}s",
                 "progress_id": progress_id,
                 "error": f"Operation still in progress after {max_wait_seconds}s. "
-                         f"Check manually with GET /api/v1{endpoint}"
+                f"Check manually with GET /api/v1{endpoint}",
             }
 
         response = await make_canvas_request("get", endpoint, skip_anonymization=True)
@@ -402,7 +427,7 @@ async def poll_canvas_progress(
                 "completion": 0,
                 "message": None,
                 "progress_id": progress_id,
-                "error": f"Failed to check progress: {response['error']}"
+                "error": f"Failed to check progress: {response['error']}",
             }
 
         workflow_state = response.get("workflow_state", "unknown")
@@ -416,7 +441,7 @@ async def poll_canvas_progress(
                 "completion": 100,
                 "message": message,
                 "progress_id": response.get("id"),
-                "error": None
+                "error": None,
             }
 
         if workflow_state == "failed":
@@ -426,7 +451,7 @@ async def poll_canvas_progress(
                 "completion": completion,
                 "message": message,
                 "progress_id": response.get("id"),
-                "error": f"Bulk operation failed: {message or 'unknown error'}"
+                "error": f"Bulk operation failed: {message or 'unknown error'}",
             }
 
         # Still running -- wait and retry

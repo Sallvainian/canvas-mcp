@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 
 from ..core.cache import get_course_code, get_course_id
 from ..core.client import fetch_all_paginated_results, make_canvas_request
-from ..core.dates import format_date
 from ..core.logging import log_warning
 from ..core.validation import validate_params
 
@@ -20,8 +19,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def get_discussion_participation_summary(
-        course_identifier: str | int,
-        topic_id: str | int
+        course_identifier: str | int, topic_id: str | int
     ) -> str:
         """Get a participation summary for a discussion topic, showing who posted, replied, and who is silent.
 
@@ -37,7 +35,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         # Fetch enrolled students
         students = await fetch_all_paginated_results(
             f"/courses/{course_id}/users",
-            {"enrollment_type[]": "student", "per_page": 100}
+            {"enrollment_type[]": "student", "per_page": 100},
         )
 
         if isinstance(students, dict) and "error" in students:
@@ -46,7 +44,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         # Fetch discussion entries
         entries = await fetch_all_paginated_results(
             f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            {"per_page": 100}
+            {"per_page": 100},
         )
 
         if isinstance(entries, dict) and "error" in entries:
@@ -103,12 +101,14 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
 
         # Categorize students
         student_list = students if isinstance(students, list) else []
-        student_map = {str(s.get("id", "")): s.get("name", "Unknown") for s in student_list}
+        student_map = {
+            str(s.get("id", "")): s.get("name", "Unknown") for s in student_list
+        }
 
         full_participants = []  # Posted AND replied
-        posters_only = []       # Posted but no replies
-        repliers_only = []      # Replied but no posts
-        silent = []             # No participation at all
+        posters_only = []  # Posted but no replies
+        repliers_only = []  # Replied but no posts
+        silent = []  # No participation at all
 
         for student_id, student_name in student_map.items():
             p = participation.get(student_id, {"posts": 0, "replies": 0})
@@ -129,12 +129,18 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         total_students = len(student_map)
         total_participants = total_students - len(silent)
 
-        result = f"Discussion Participation Summary\n"
+        result = "Discussion Participation Summary\n"
         result += f"Course: {course_display}\n"
         result += f"Discussion: {topic_title} (ID: {topic_id})\n\n"
 
-        result += f"Overview: {total_participants}/{total_students} students participated "
-        result += f"({total_participants / total_students * 100:.0f}%)\n" if total_students > 0 else "(0%)\n"
+        result += (
+            f"Overview: {total_participants}/{total_students} students participated "
+        )
+        result += (
+            f"({total_participants / total_students * 100:.0f}%)\n"
+            if total_students > 0
+            else "(0%)\n"
+        )
         result += f"  Full participation (post + reply): {len(full_participants)}\n"
         result += f"  Posted only: {len(posters_only)}\n"
         result += f"  Replied only: {len(repliers_only)}\n"
@@ -164,7 +170,9 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
             for sid, name in silent:
                 result += f"  - {name} (ID: {sid})\n"
                 silent_ids.append(sid)
-            result += f"\nSilent student IDs (for bulk messaging): {','.join(silent_ids)}\n"
+            result += (
+                f"\nSilent student IDs (for bulk messaging): {','.join(silent_ids)}\n"
+            )
 
         return result
 
@@ -177,7 +185,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         points_for_post: float = 5.0,
         points_for_reply: float = 3.0,
         max_points: float | None = None,
-        dry_run: bool = True
+        dry_run: bool = True,
     ) -> str:
         """Auto-grade discussion participation based on post and reply counts.
 
@@ -207,7 +215,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         # Fetch enrolled students
         students = await fetch_all_paginated_results(
             f"/courses/{course_id}/users",
-            {"enrollment_type[]": "student", "per_page": 100}
+            {"enrollment_type[]": "student", "per_page": 100},
         )
         if isinstance(students, dict) and "error" in students:
             return f"Error fetching students: {students['error']}"
@@ -215,7 +223,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         # Fetch discussion entries
         entries = await fetch_all_paginated_results(
             f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            {"per_page": 100}
+            {"per_page": 100},
         )
         if isinstance(entries, dict) and "error" in entries:
             return f"Error fetching entries: {entries['error']}"
@@ -249,7 +257,9 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
             student_name = student.get("name", "Unknown")
             p = participation.get(student_id, {"posts": 0, "replies": 0})
 
-            raw_score = (p["posts"] * points_for_post) + (p["replies"] * points_for_reply)
+            raw_score = (p["posts"] * points_for_post) + (
+                p["replies"] * points_for_reply
+            )
             capped_score = min(raw_score, points_possible)
 
             grades[student_id] = {
@@ -257,24 +267,30 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
                 "posts": p["posts"],
                 "replies": p["replies"],
                 "raw_score": raw_score,
-                "final_score": capped_score
+                "final_score": capped_score,
             }
 
         # Format results
         course_display = await get_course_code(course_id) or course_identifier
         result = f"{'DRY RUN - ' if dry_run else ''}Discussion Participation Grading\n"
         result += f"Course: {course_display}\n"
-        result += f"Assignment: {assignment.get('name', 'Unknown')} (ID: {assignment_id})\n"
+        result += (
+            f"Assignment: {assignment.get('name', 'Unknown')} (ID: {assignment_id})\n"
+        )
         result += f"Points: {points_for_post}/post, {points_for_reply}/reply, max {points_possible}\n\n"
 
         result += f"{'Name':<30} {'Posts':<6} {'Replies':<8} {'Score':<8}\n"
         result += "-" * 55 + "\n"
 
-        for _sid, g in sorted(grades.items(), key=lambda x: x[1]["final_score"], reverse=True):
+        for _sid, g in sorted(
+            grades.items(), key=lambda x: x[1]["final_score"], reverse=True
+        ):
             result += f"{g['name']:<30} {g['posts']:<6} {g['replies']:<8} {g['final_score']:<8.1f}\n"
 
         if dry_run:
-            result += f"\nDry run complete. Set dry_run=False to submit {len(grades)} grades."
+            result += (
+                f"\nDry run complete. Set dry_run=False to submit {len(grades)} grades."
+            )
             return result
 
         # Submit grades
@@ -285,13 +301,11 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
                 "put",
                 f"/courses/{course_id}/assignments/{assignment_id}/submissions/{student_id}",
                 data={
-                    "submission": {
-                        "posted_grade": str(g["final_score"])
-                    },
+                    "submission": {"posted_grade": str(g["final_score"])},
                     "comment": {
                         "text_comment": f"Discussion participation: {g['posts']} posts, {g['replies']} replies"
-                    }
-                }
+                    },
+                },
             )
             if isinstance(response, dict) and "error" in response:
                 failed += 1
@@ -304,9 +318,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def export_discussion_data(
-        course_identifier: str | int,
-        topic_id: str | int,
-        format: str = "csv"
+        course_identifier: str | int, topic_id: str | int, format: str = "csv"
     ) -> str:
         """Export discussion data including all entries and replies.
 
@@ -328,7 +340,7 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         # Fetch all entries
         entries = await fetch_all_paginated_results(
             f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            {"per_page": 100}
+            {"per_page": 100},
         )
         if isinstance(entries, dict) and "error" in entries:
             return f"Error fetching entries: {entries['error']}"
@@ -338,35 +350,51 @@ def register_discussion_analytics_tools(mcp: FastMCP) -> None:
         if format == "csv":
             output = io.StringIO()
             writer = csv.writer(output)
-            writer.writerow(["entry_id", "user_id", "user_name", "type", "parent_entry_id", "created_at", "message_preview"])
+            writer.writerow(
+                [
+                    "entry_id",
+                    "user_id",
+                    "user_name",
+                    "type",
+                    "parent_entry_id",
+                    "created_at",
+                    "message_preview",
+                ]
+            )
 
             for entry in entries_list:
                 msg = entry.get("message", "")
-                msg_clean = re.sub(r'<[^>]+>', '', msg)[:200] if msg else ""
+                msg_clean = re.sub(r"<[^>]+>", "", msg)[:200] if msg else ""
 
-                writer.writerow([
-                    entry.get("id"),
-                    entry.get("user_id"),
-                    entry.get("user_name", "Unknown"),
-                    "post",
-                    "",
-                    entry.get("created_at", ""),
-                    msg_clean
-                ])
+                writer.writerow(
+                    [
+                        entry.get("id"),
+                        entry.get("user_id"),
+                        entry.get("user_name", "Unknown"),
+                        "post",
+                        "",
+                        entry.get("created_at", ""),
+                        msg_clean,
+                    ]
+                )
 
                 for reply in entry.get("recent_replies", []):
                     reply_msg = reply.get("message", "")
-                    reply_clean = re.sub(r'<[^>]+>', '', reply_msg)[:200] if reply_msg else ""
+                    reply_clean = (
+                        re.sub(r"<[^>]+>", "", reply_msg)[:200] if reply_msg else ""
+                    )
 
-                    writer.writerow([
-                        reply.get("id"),
-                        reply.get("user_id"),
-                        reply.get("user_name", "Unknown"),
-                        "reply",
-                        entry.get("id"),
-                        reply.get("created_at", ""),
-                        reply_clean
-                    ])
+                    writer.writerow(
+                        [
+                            reply.get("id"),
+                            reply.get("user_id"),
+                            reply.get("user_name", "Unknown"),
+                            "reply",
+                            entry.get("id"),
+                            reply.get("created_at", ""),
+                            reply_clean,
+                        ]
+                    )
 
             course_display = await get_course_code(course_id) or course_identifier
             return f"Discussion Export: '{topic_title}' in {course_display}\n\n{output.getvalue()}"

@@ -6,7 +6,7 @@ Allows Claude to search and explore available TypeScript tools.
 import json
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -18,8 +18,7 @@ def register_discovery_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def search_canvas_tools(
-        query: str = "",
-        detail_level: DetailLevel = "signatures"
+        query: str = "", detail_level: DetailLevel = "signatures"
     ) -> str:
         """
         Search available Canvas code API tools by keyword.
@@ -51,13 +50,16 @@ def register_discovery_tools(mcp: FastMCP) -> None:
             code_api_path = Path(__file__).parent.parent / "code_api" / "canvas"
 
             if not code_api_path.exists():
-                return json.dumps({
-                    "error": "Code API directory not found",
-                    "help": "The code execution API may not be set up yet"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "error": "Code API directory not found",
+                        "help": "The code execution API may not be set up yet",
+                    },
+                    indent=2,
+                )
 
             # Search through TypeScript files
-            matches = []
+            matches: list[str | dict[str, str | None]] = []
             query_lower = query.lower()
 
             for ts_file in code_api_path.rglob("*.ts"):
@@ -67,9 +69,9 @@ def register_discovery_tools(mcp: FastMCP) -> None:
 
                 # Check if query matches filename or path
                 file_match = (
-                    not query or
-                    query_lower in ts_file.stem.lower() or
-                    query_lower in str(ts_file.relative_to(code_api_path)).lower()
+                    not query
+                    or query_lower in ts_file.stem.lower()
+                    or query_lower in str(ts_file.relative_to(code_api_path)).lower()
                 )
 
                 if not file_match:
@@ -93,61 +95,69 @@ def register_discovery_tools(mcp: FastMCP) -> None:
                         signature = extract_function_signature(content)
                         doc_comment = extract_doc_comment(content)
 
-                        matches.append({
-                            "file": relative_path,
-                            "signature": signature,
-                            "description": doc_comment[:200] if doc_comment else None
-                        })
+                        matches.append(
+                            {
+                                "file": relative_path,
+                                "signature": signature,
+                                "description": (
+                                    doc_comment[:200] if doc_comment else None
+                                ),
+                            }
+                        )
                     except Exception as e:
-                        matches.append({
-                            "file": relative_path,
-                            "error": f"Could not parse signature: {str(e)}"
-                        })
+                        matches.append(
+                            {
+                                "file": relative_path,
+                                "error": f"Could not parse signature: {str(e)}",
+                            }
+                        )
 
                 else:  # full
                     try:
                         content = ts_file.read_text()
-                        matches.append({
-                            "file": relative_path,
-                            "content": content
-                        })
+                        matches.append({"file": relative_path, "content": content})
                     except Exception as e:
-                        matches.append({
-                            "file": relative_path,
-                            "error": f"Could not read file: {str(e)}"
-                        })
+                        matches.append(
+                            {
+                                "file": relative_path,
+                                "error": f"Could not read file: {str(e)}",
+                            }
+                        )
 
             if not matches:
-                return json.dumps({
-                    "message": f"No tools found matching '{query}'",
-                    "suggestion": "Try a different search term or use empty string to see all tools"
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "message": f"No tools found matching '{query}'",
+                        "suggestion": "Try a different search term or use empty string to see all tools",
+                    },
+                    indent=2,
+                )
 
-            return json.dumps({
-                "query": query,
-                "detail_level": detail_level,
-                "count": len(matches),
-                "tools": matches
-            }, indent=2)
+            return json.dumps(
+                {
+                    "query": query,
+                    "detail_level": detail_level,
+                    "count": len(matches),
+                    "tools": matches,
+                },
+                indent=2,
+            )
 
         except Exception as e:
-            return json.dumps({
-                "error": str(e),
-                "type": type(e).__name__
-            }, indent=2)
+            return json.dumps({"error": str(e), "type": type(e).__name__}, indent=2)
 
 
 def extract_function_signature(content: str) -> str:
     """Extract main exported function signature from TypeScript file"""
     # Look for: export async function functionName(args): Promise<Type>
-    pattern = r'export\s+async\s+function\s+(\w+)\s*\([^)]*\)\s*:\s*Promise<[^>]+>'
+    pattern = r"export\s+async\s+function\s+(\w+)\s*\([^)]*\)\s*:\s*Promise<[^>]+>"
     match = re.search(pattern, content)
 
     if match:
         return match.group(0)
 
     # Fallback: just find export async function
-    pattern = r'export\s+async\s+function\s+\w+[^{]+'
+    pattern = r"export\s+async\s+function\s+\w+[^{]+"
     match = re.search(pattern, content)
 
     if match:
@@ -159,13 +169,13 @@ def extract_function_signature(content: str) -> str:
 def extract_doc_comment(content: str) -> str:
     """Extract JSDoc comment from TypeScript file"""
     # Look for /** ... */ style comments
-    pattern = r'/\*\*\s*(.*?)\s*\*/'
+    pattern = r"/\*\*\s*(.*?)\s*\*/"
     match = re.search(pattern, content, re.DOTALL)
 
     if match:
         # Clean up the comment
         doc = match.group(1)
-        doc = re.sub(r'^\s*\*\s*', '', doc, flags=re.MULTILINE)
+        doc = re.sub(r"^\s*\*\s*", "", doc, flags=re.MULTILINE)
         return doc.strip()
 
     return ""

@@ -1,8 +1,7 @@
 """Course caching system for Canvas API."""
 
-import sys
-
 from .client import fetch_all_paginated_results, make_canvas_request
+from .logging import log_debug, log_error, log_info
 from .validation import validate_params
 
 # Global cache for course codes to IDs
@@ -14,11 +13,11 @@ async def refresh_course_cache() -> bool:
     """Refresh the global course cache."""
     global course_code_to_id_cache, id_to_course_code_cache
 
-    print("Refreshing course cache...", file=sys.stderr)
+    log_debug("Refreshing course cache...")
     courses = await fetch_all_paginated_results("/courses", {"per_page": 100})
 
     if isinstance(courses, dict) and "error" in courses:
-        print(f"Error building course cache: {courses.get('error')}", file=sys.stderr)
+        log_error(f"Error building course cache: {courses.get('error')}")
         return False
 
     # Build caches for bidirectional lookups
@@ -33,7 +32,7 @@ async def refresh_course_cache() -> bool:
             course_code_to_id_cache[course_code] = course_id
             id_to_course_code_cache[course_id] = course_code
 
-    print(f"Cached {len(course_code_to_id_cache)} course codes", file=sys.stderr)
+    log_info(f"Cached {len(course_code_to_id_cache)} course codes")
     return True
 
 
@@ -82,8 +81,11 @@ async def get_course_id(course_identifier: str | int) -> str | None:
     return course_str
 
 
-async def get_course_code(course_id: str) -> str | None:
+async def get_course_code(course_id: str | None) -> str | None:
     """Get course code from ID, with caching."""
+    if course_id is None:
+        return None
+
     global id_to_course_code_cache, course_code_to_id_cache
 
     # If it's already a code-like string with underscores
@@ -103,7 +105,7 @@ async def get_course_code(course_id: str) -> str | None:
     # If we can't find a code, try to fetch the course directly
     response = await make_canvas_request("get", f"/courses/{course_id}")
     if "error" not in response and "course_code" in response:
-        code = response.get("course_code", "")
+        code: str = str(response.get("course_code", ""))
         # Update our cache
         if code:
             id_to_course_code_cache[course_id] = code

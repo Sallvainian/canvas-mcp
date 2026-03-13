@@ -19,22 +19,58 @@ class PeerReviewCommentAnalyzer:
 
     def __init__(self) -> None:
         self.quality_keywords = {
-            'constructive': [
-                'suggest', 'recommend', 'consider', 'improve', 'enhance', 'modify',
-                'try', 'could', 'might', 'perhaps', 'instead', 'alternative'
+            "constructive": [
+                "suggest",
+                "recommend",
+                "consider",
+                "improve",
+                "enhance",
+                "modify",
+                "try",
+                "could",
+                "might",
+                "perhaps",
+                "instead",
+                "alternative",
             ],
-            'specific': [
-                'line', 'section', 'paragraph', 'function', 'method', 'variable',
-                'code', 'syntax', 'logic', 'algorithm', 'implementation'
+            "specific": [
+                "line",
+                "section",
+                "paragraph",
+                "function",
+                "method",
+                "variable",
+                "code",
+                "syntax",
+                "logic",
+                "algorithm",
+                "implementation",
             ],
-            'generic': [
-                'good job', 'nice work', 'well done', 'great', 'awesome', 'perfect',
-                'looks good', 'fine', 'ok', 'okay', 'correct'
+            "generic": [
+                "good job",
+                "nice work",
+                "well done",
+                "great",
+                "awesome",
+                "perfect",
+                "looks good",
+                "fine",
+                "ok",
+                "okay",
+                "correct",
             ],
-            'harsh': [
-                'terrible', 'awful', 'wrong', 'bad', 'horrible', 'stupid',
-                'useless', 'worthless', 'garbage', 'trash'
-            ]
+            "harsh": [
+                "terrible",
+                "awful",
+                "wrong",
+                "bad",
+                "horrible",
+                "stupid",
+                "useless",
+                "worthless",
+                "garbage",
+                "trash",
+            ],
         }
 
     async def get_peer_review_comments(
@@ -44,7 +80,7 @@ class PeerReviewCommentAnalyzer:
         include_reviewer_info: bool = True,
         include_reviewee_info: bool = True,
         include_submission_context: bool = False,
-        anonymize_students: bool = False
+        anonymize_students: bool = False,
     ) -> dict[str, Any]:
         """
         Retrieve actual comment text for peer reviews on a specific assignment.
@@ -63,31 +99,36 @@ class PeerReviewCommentAnalyzer:
         try:
             # Get assignment details
             assignment_response = await make_canvas_request(
-                "get",
-                f"/courses/{course_id}/assignments/{assignment_id}"
+                "get", f"/courses/{course_id}/assignments/{assignment_id}"
             )
 
             if "error" in assignment_response:
-                return {"error": f"Failed to get assignment: {assignment_response['error']}"}
+                return {
+                    "error": f"Failed to get assignment: {assignment_response['error']}"
+                }
 
             # Get peer reviews (these don't include comments directly)
             peer_reviews_response = await make_canvas_request(
                 "get",
                 f"/courses/{course_id}/assignments/{assignment_id}/peer_reviews",
-                params={"include[]": ["user", "assessor"]}
+                params={"include[]": ["user", "assessor"]},
             )
 
             if "error" in peer_reviews_response:
-                return {"error": f"Failed to get peer reviews: {peer_reviews_response['error']}"}
+                return {
+                    "error": f"Failed to get peer reviews: {peer_reviews_response['error']}"
+                }
 
-            peer_reviews: list[Any] = peer_reviews_response if isinstance(peer_reviews_response, list) else []
+            peer_reviews: list[Any] = (
+                peer_reviews_response if isinstance(peer_reviews_response, list) else []
+            )
 
             # Get users for name mapping if needed
             users_map = {}
             if include_reviewer_info or include_reviewee_info:
                 users_response = await fetch_all_paginated_results(
                     f"/courses/{course_id}/users",
-                    {"enrollment_type[]": "student", "per_page": 100}
+                    {"enrollment_type[]": "student", "per_page": 100},
                 )
                 if isinstance(users_response, list):
                     users_map = {user["id"]: user for user in users_response}
@@ -97,7 +138,7 @@ class PeerReviewCommentAnalyzer:
             submissions_by_id = {}
             submissions_response = await fetch_all_paginated_results(
                 f"/courses/{course_id}/assignments/{assignment_id}/submissions",
-                {"include[]": ["submission_comments"], "per_page": 100}
+                {"include[]": ["submission_comments"], "per_page": 100},
             )
             if isinstance(submissions_response, list):
                 for sub in submissions_response:
@@ -123,30 +164,50 @@ class PeerReviewCommentAnalyzer:
                 if include_reviewer_info and reviewer_id in users_map:
                     user = users_map[reviewer_id]
                     if anonymize_students:
-                        reviewer_info.update({
-                            "student_name": generate_anonymous_id(reviewer_id, "Student"),
-                            "anonymous_id": generate_anonymous_id(reviewer_id, "Reviewer")
-                        })
+                        reviewer_info.update(
+                            {
+                                "student_name": generate_anonymous_id(
+                                    reviewer_id, "Student"
+                                ),
+                                "anonymous_id": generate_anonymous_id(
+                                    reviewer_id, "Reviewer"
+                                ),
+                            }
+                        )
                     else:
-                        reviewer_info.update({
-                            "student_name": user.get("name", "Unknown"),
-                            "anonymous_id": generate_anonymous_id(reviewer_id, "Reviewer")
-                        })
+                        reviewer_info.update(
+                            {
+                                "student_name": user.get("name", "Unknown"),
+                                "anonymous_id": generate_anonymous_id(
+                                    reviewer_id, "Reviewer"
+                                ),
+                            }
+                        )
 
                 # Build reviewee info
                 reviewee_info = {"student_id": reviewee_id}
                 if include_reviewee_info and reviewee_id in users_map:
                     user = users_map[reviewee_id]
                     if anonymize_students:
-                        reviewee_info.update({
-                            "student_name": generate_anonymous_id(reviewee_id, "Student"),
-                            "anonymous_id": generate_anonymous_id(reviewee_id, "Reviewee")
-                        })
+                        reviewee_info.update(
+                            {
+                                "student_name": generate_anonymous_id(
+                                    reviewee_id, "Student"
+                                ),
+                                "anonymous_id": generate_anonymous_id(
+                                    reviewee_id, "Reviewee"
+                                ),
+                            }
+                        )
                     else:
-                        reviewee_info.update({
-                            "student_name": user.get("name", "Unknown"),
-                            "anonymous_id": generate_anonymous_id(reviewee_id, "Reviewee")
-                        })
+                        reviewee_info.update(
+                            {
+                                "student_name": user.get("name", "Unknown"),
+                                "anonymous_id": generate_anonymous_id(
+                                    reviewee_id, "Reviewee"
+                                ),
+                            }
+                        )
 
                 # Build submission info
                 submission_info = {}
@@ -155,7 +216,7 @@ class PeerReviewCommentAnalyzer:
                     submission_info = {
                         "submission_id": sub.get("id"),
                         "submitted_at": format_date(sub.get("submitted_at")),
-                        "attempt": sub.get("attempt", 1)
+                        "attempt": sub.get("attempt", 1),
                     }
 
                 # Process comment content - Extract from submission comments
@@ -165,7 +226,7 @@ class PeerReviewCommentAnalyzer:
                     "rubric_assessments": [],
                     "timestamp": None,
                     "word_count": 0,
-                    "character_count": 0
+                    "character_count": 0,
                 }
 
                 # Get the submission that was reviewed
@@ -178,12 +239,18 @@ class PeerReviewCommentAnalyzer:
                     for comment in submission_comments:
                         if comment.get("author_id") == reviewer_id:
                             comment_text = comment.get("comment", "")
-                            review_content.update({
-                                "comment_text": comment_text,
-                                "timestamp": format_date(comment.get("created_at")),
-                                "word_count": len(comment_text.split()) if comment_text else 0,
-                                "character_count": len(comment_text) if comment_text else 0
-                            })
+                            review_content.update(
+                                {
+                                    "comment_text": comment_text,
+                                    "timestamp": format_date(comment.get("created_at")),
+                                    "word_count": (
+                                        len(comment_text.split()) if comment_text else 0
+                                    ),
+                                    "character_count": (
+                                        len(comment_text) if comment_text else 0
+                                    ),
+                                }
+                            )
 
                             total_word_count += review_content["word_count"]
                             if comment_text.strip():
@@ -208,7 +275,7 @@ class PeerReviewCommentAnalyzer:
                     "review_id": f"review_{pr.get('id', 'unknown')}",
                     "reviewer": reviewer_info,
                     "reviewee": reviewee_info,
-                    "review_content": review_content
+                    "review_content": review_content,
                 }
 
                 if include_submission_context:
@@ -217,14 +284,16 @@ class PeerReviewCommentAnalyzer:
                 processed_reviews.append(review_data)
 
             # Calculate summary statistics
-            avg_word_count = total_word_count / total_comments if total_comments > 0 else 0
+            avg_word_count = (
+                total_word_count / total_comments if total_comments > 0 else 0
+            )
 
             result = {
                 "assignment_info": {
                     "assignment_id": assignment_id,
                     "assignment_name": assignment_response.get("name", "Unknown"),
                     "total_reviews": len(peer_reviews),
-                    "completed_reviews": total_comments
+                    "completed_reviews": total_comments,
                 },
                 "peer_reviews": processed_reviews,
                 "summary_statistics": {
@@ -232,8 +301,8 @@ class PeerReviewCommentAnalyzer:
                     "average_word_count": round(avg_word_count, 1),
                     "comments_with_text": comments_with_text,
                     "empty_comments": empty_comments,
-                    "average_rating": None  # Placeholder for future rubric integration
-                }
+                    "average_rating": None,  # Placeholder for future rubric integration
+                },
             }
 
             return result
@@ -246,7 +315,7 @@ class PeerReviewCommentAnalyzer:
         course_id: int,
         assignment_id: int,
         analysis_criteria: dict[str, Any] | None = None,
-        generate_report: bool = True
+        generate_report: bool = True,
     ) -> dict[str, Any]:
         """
         Analyze the quality and content of peer review comments.
@@ -294,13 +363,23 @@ class PeerReviewCommentAnalyzer:
 
                 # Flag problematic reviews
                 if quality_score < 2.0 or word_count < 5:
-                    flagged_reviews.append({
-                        "review_id": review.get("review_id"),
-                        "flag_reason": "low_quality" if quality_score < 2.0 else "extremely_short",
-                        "comment": comment_text[:100] + "..." if len(comment_text) > 100 else comment_text,
-                        "word_count": word_count,
-                        "quality_score": round(quality_score, 1)
-                    })
+                    flagged_reviews.append(
+                        {
+                            "review_id": review.get("review_id"),
+                            "flag_reason": (
+                                "low_quality"
+                                if quality_score < 2.0
+                                else "extremely_short"
+                            ),
+                            "comment": (
+                                comment_text[:100] + "..."
+                                if len(comment_text) > 100
+                                else comment_text
+                            ),
+                            "word_count": word_count,
+                            "quality_score": round(quality_score, 1),
+                        }
+                    )
 
             # Calculate statistics
             total_reviews = len(reviews)
@@ -326,17 +405,17 @@ class PeerReviewCommentAnalyzer:
                     "quality_distribution": {
                         "high_quality": high_quality,
                         "medium_quality": medium_quality,
-                        "low_quality": low_quality
+                        "low_quality": low_quality,
                     },
-                    "average_quality_score": round(avg_quality_score, 1)
+                    "average_quality_score": round(avg_quality_score, 1),
                 },
                 "detailed_metrics": {
                     "word_count_stats": word_count_stats,
                     "constructiveness_analysis": constructiveness_analysis,
-                    "sentiment_analysis": sentiment_analysis
+                    "sentiment_analysis": sentiment_analysis,
                 },
                 "flagged_reviews": flagged_reviews[:20],  # Limit to top 20
-                "recommendations": recommendations
+                "recommendations": recommendations,
             }
 
             return result
@@ -362,27 +441,31 @@ class PeerReviewCommentAnalyzer:
             score -= 1.0
 
         # Constructive language
-        constructive_count = sum(1 for word in self.quality_keywords['constructive']
-                                if word in text_lower)
+        constructive_count = sum(
+            1 for word in self.quality_keywords["constructive"] if word in text_lower
+        )
         score += min(constructive_count * 0.3, 1.0)
 
         # Specific language
-        specific_count = sum(1 for word in self.quality_keywords['specific']
-                           if word in text_lower)
+        specific_count = sum(
+            1 for word in self.quality_keywords["specific"] if word in text_lower
+        )
         score += min(specific_count * 0.2, 0.8)
 
         # Generic language penalty
-        generic_count = sum(1 for phrase in self.quality_keywords['generic']
-                          if phrase in text_lower)
+        generic_count = sum(
+            1 for phrase in self.quality_keywords["generic"] if phrase in text_lower
+        )
         score -= min(generic_count * 0.4, 1.5)
 
         # Harsh language penalty
-        harsh_count = sum(1 for word in self.quality_keywords['harsh']
-                         if word in text_lower)
+        harsh_count = sum(
+            1 for word in self.quality_keywords["harsh"] if word in text_lower
+        )
         score -= harsh_count * 0.5
 
         # Question marks indicate engagement
-        if '?' in comment_text:
+        if "?" in comment_text:
             score += 0.3
 
         return max(0.0, min(5.0, score))
@@ -395,9 +478,11 @@ class PeerReviewCommentAnalyzer:
         return {
             "mean": round(statistics.mean(word_counts), 1),
             "median": statistics.median(word_counts),
-            "std_dev": round(statistics.stdev(word_counts), 1) if len(word_counts) > 1 else 0,
+            "std_dev": (
+                round(statistics.stdev(word_counts), 1) if len(word_counts) > 1 else 0
+            ),
             "min": min(word_counts),
-            "max": max(word_counts)
+            "max": max(word_counts),
         }
 
     def _analyze_constructiveness(self, comment_texts: list[str]) -> dict[str, int]:
@@ -410,27 +495,37 @@ class PeerReviewCommentAnalyzer:
             text_lower = text.lower()
 
             # Check for constructive language
-            if any(word in text_lower for word in self.quality_keywords['constructive']):
+            if any(
+                word in text_lower for word in self.quality_keywords["constructive"]
+            ):
                 constructive_count += 1
 
             # Check for generic language
-            if any(phrase in text_lower for phrase in self.quality_keywords['generic']):
+            if any(phrase in text_lower for phrase in self.quality_keywords["generic"]):
                 generic_count += 1
 
             # Check for specific language
-            if any(word in text_lower for word in self.quality_keywords['specific']):
+            if any(word in text_lower for word in self.quality_keywords["specific"]):
                 specific_count += 1
 
         return {
             "constructive_feedback_count": constructive_count,
             "generic_comments": generic_count,
-            "specific_suggestions": specific_count
+            "specific_suggestions": specific_count,
         }
 
     def _analyze_sentiment(self, comment_texts: list[str]) -> dict[str, float]:
         """Basic sentiment analysis of comments."""
-        positive_words = ['good', 'great', 'excellent', 'nice', 'well', 'correct', 'clear']
-        negative_words = ['bad', 'wrong', 'poor', 'unclear', 'confusing', 'incorrect']
+        positive_words = [
+            "good",
+            "great",
+            "excellent",
+            "nice",
+            "well",
+            "correct",
+            "clear",
+        ]
+        negative_words = ["bad", "wrong", "poor", "unclear", "confusing", "incorrect"]
 
         positive_count = 0
         negative_count = 0
@@ -452,14 +547,14 @@ class PeerReviewCommentAnalyzer:
         return {
             "positive_sentiment": round(positive_count / total, 2) if total > 0 else 0,
             "neutral_sentiment": round(neutral_count / total, 2) if total > 0 else 0,
-            "negative_sentiment": round(negative_count / total, 2) if total > 0 else 0
+            "negative_sentiment": round(negative_count / total, 2) if total > 0 else 0,
         }
 
     def _generate_recommendations(
         self,
         flagged_reviews: list[dict],
         word_count_stats: dict,
-        constructiveness_analysis: dict
+        constructiveness_analysis: dict,
     ) -> list[str]:
         """Generate recommendations based on analysis."""
         recommendations = []
@@ -474,7 +569,9 @@ class PeerReviewCommentAnalyzer:
                 "Average comment length is low - consider providing more specific feedback guidelines"
             )
 
-        if constructiveness_analysis.get("generic_comments", 0) > constructiveness_analysis.get("constructive_feedback_count", 0):
+        if constructiveness_analysis.get(
+            "generic_comments", 0
+        ) > constructiveness_analysis.get("constructive_feedback_count", 0):
             recommendations.append(
                 "Many comments are generic - consider teaching specific feedback techniques"
             )
@@ -485,10 +582,7 @@ class PeerReviewCommentAnalyzer:
         return recommendations
 
     async def identify_problematic_peer_reviews(
-        self,
-        course_id: int,
-        assignment_id: int,
-        criteria: dict[str, Any] | None = None
+        self, course_id: int, assignment_id: int, criteria: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         """
         Flag reviews that may need instructor attention.
@@ -503,10 +597,10 @@ class PeerReviewCommentAnalyzer:
         """
         try:
             # Default criteria
-            default_criteria = {
+            default_criteria: dict[str, Any] = {
                 "min_word_count": 10,
                 "generic_phrases": ["good job", "nice work", "looks good"],
-                "max_quality_score": 2.0
+                "max_quality_score": 2.0,
             }
 
             if criteria:
@@ -550,22 +644,32 @@ class PeerReviewCommentAnalyzer:
                 # This would require comparing against all other comments
 
                 # Check for potentially inappropriate content
-                if any(word in text_lower for word in self.quality_keywords['harsh']):
+                if any(word in text_lower for word in self.quality_keywords["harsh"]):
                     flags.append("potentially_harsh")
 
                 if flags:
-                    flagged_reviews.append({
-                        "review_id": review.get("review_id"),
-                        "reviewer_id": review.get("reviewer", {}).get("anonymous_id", "Unknown"),
-                        "reviewee_id": review.get("reviewee", {}).get("anonymous_id", "Unknown"),
-                        "flags": flags,
-                        "comment_preview": comment_text[:100] + "..." if len(comment_text) > 100 else comment_text,
-                        "word_count": word_count,
-                        "quality_score": round(quality_score, 1)
-                    })
+                    flagged_reviews.append(
+                        {
+                            "review_id": review.get("review_id"),
+                            "reviewer_id": review.get("reviewer", {}).get(
+                                "anonymous_id", "Unknown"
+                            ),
+                            "reviewee_id": review.get("reviewee", {}).get(
+                                "anonymous_id", "Unknown"
+                            ),
+                            "flags": flags,
+                            "comment_preview": (
+                                comment_text[:100] + "..."
+                                if len(comment_text) > 100
+                                else comment_text
+                            ),
+                            "word_count": word_count,
+                            "quality_score": round(quality_score, 1),
+                        }
+                    )
 
             # Categorize flags
-            flag_summary = Counter()
+            flag_summary: Counter[str] = Counter()
             for review in flagged_reviews:
                 for flag in review["flags"]:
                     flag_summary[flag] += 1
@@ -575,7 +679,7 @@ class PeerReviewCommentAnalyzer:
                 "total_flagged": len(flagged_reviews),
                 "flag_summary": dict(flag_summary),
                 "flagged_reviews": flagged_reviews,
-                "criteria_used": default_criteria
+                "criteria_used": default_criteria,
             }
 
             return result

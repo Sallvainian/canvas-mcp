@@ -17,6 +17,7 @@ from .config import get_config
 
 class Verbosity(Enum):
     """Verbosity levels for response formatting."""
+
     COMPACT = "compact"
     STANDARD = "standard"
     VERBOSE = "verbose"
@@ -38,7 +39,7 @@ def get_verbosity() -> Verbosity:
     global _verbosity
     if _verbosity is None:
         config = get_config()
-        verbosity_str = getattr(config, 'verbosity', 'compact').lower()
+        verbosity_str = getattr(config, "verbosity", "compact").lower()
         try:
             _verbosity = Verbosity(verbosity_str)
         except ValueError:
@@ -62,9 +63,7 @@ def is_compact() -> bool:
 
 
 def format_header(
-    tool_name: str,
-    context: str | None = None,
-    verbosity: Verbosity | None = None
+    tool_name: str, context: str | None = None, verbosity: Verbosity | None = None
 ) -> str:
     """Format a response header based on verbosity.
 
@@ -107,7 +106,7 @@ def format_header(
 def format_item(
     fields: dict[str, Any],
     field_order: list[str] | None = None,
-    verbosity: Verbosity | None = None
+    verbosity: Verbosity | None = None,
 ) -> str:
     """Format a single item (assignment, submission, etc.) based on verbosity.
 
@@ -126,7 +125,9 @@ def format_item(
 
     if v == Verbosity.COMPACT:
         # Pipe-delimited values only
-        values = [_format_value_compact(fields.get(f)) for f in field_order if f in fields]
+        values = [
+            _format_value_compact(fields.get(f)) for f in field_order if f in fields
+        ]
         return "|".join(values)
     elif v == Verbosity.STANDARD:
         # Label: Value format with abbreviated labels
@@ -152,7 +153,7 @@ def format_list(
     items: list[dict[str, Any]],
     field_order: list[str] | None = None,
     verbosity: Verbosity | None = None,
-    separator: str | None = None
+    separator: str | None = None,
 ) -> str:
     """Format a list of items based on verbosity.
 
@@ -197,7 +198,7 @@ def format_response(
     header: str,
     body: str,
     verbosity: Verbosity | None = None,
-    include_footer: bool = True
+    include_footer: bool = True,
 ) -> str:
     """Combine header, body, and optional footer into complete response.
 
@@ -247,7 +248,7 @@ def format_count(
     count: int,
     total: int | None = None,
     label: str = "",
-    verbosity: Verbosity | None = None
+    verbosity: Verbosity | None = None,
 ) -> str:
     """Format a count with optional total and percentage.
 
@@ -278,8 +279,7 @@ def format_count(
 
 
 def format_stats(
-    stats: dict[str, float | int],
-    verbosity: Verbosity | None = None
+    stats: dict[str, float | int], verbosity: Verbosity | None = None
 ) -> str:
     """Format statistical data based on verbosity.
 
@@ -326,6 +326,7 @@ def format_stats(
 
 
 # Private helper functions
+
 
 def _format_value_compact(value: Any) -> str:
     """Format a value for compact mode."""
@@ -389,9 +390,9 @@ def _abbreviate_label(label: str) -> str:
 
 # Convenience functions for common formatting patterns
 
+
 def format_assignment_item(
-    assignment: dict[str, Any],
-    verbosity: Verbosity | None = None
+    assignment: dict[str, Any], verbosity: Verbosity | None = None
 ) -> str:
     """Format a single assignment for output.
 
@@ -412,8 +413,7 @@ def format_assignment_item(
 
 
 def format_submission_item(
-    submission: dict[str, Any],
-    verbosity: Verbosity | None = None
+    submission: dict[str, Any], verbosity: Verbosity | None = None
 ) -> str:
     """Format a single submission for output.
 
@@ -433,10 +433,7 @@ def format_submission_item(
     return format_item(fields, ["user_id", "submitted_at", "score", "grade"], verbosity)
 
 
-def format_user_item(
-    user: dict[str, Any],
-    verbosity: Verbosity | None = None
-) -> str:
+def format_user_item(user: dict[str, Any], verbosity: Verbosity | None = None) -> str:
     """Format a single user for output.
 
     Args:

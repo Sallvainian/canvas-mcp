@@ -7,7 +7,6 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
@@ -30,7 +29,7 @@ def _validate_container_image(image: str) -> bool:
         return False
     # Allow alphanumeric, dots, hyphens, underscores, slashes, and colons
     # Must have at least one colon for tag
-    pattern = r'^[a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+$'
+    pattern = r"^[a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+$"
     return bool(re.match(pattern, image))
 
 
@@ -148,10 +147,7 @@ https.request = function (...args) {{
 }};
 """
     guard_file = tempfile.NamedTemporaryFile(
-        mode="w",
-        suffix=".cjs",
-        dir=directory,
-        delete=False
+        mode="w", suffix=".cjs", dir=directory, delete=False
     )
     guard_file.write(guard_contents)
     guard_file.flush()
@@ -177,14 +173,14 @@ async def _runtime_available(runtime: str) -> bool:
             runtime,
             "version",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
     except FileNotFoundError:
         return False
 
     try:
         await asyncio.wait_for(process.communicate(), timeout=2)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         process.kill()
         await process.wait()
         return False
@@ -197,10 +193,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def execute_typescript(
-        code: str,
-        timeout: int = 120
-    ) -> str:
+    async def execute_typescript(code: str, timeout: int = 120) -> str:
         """Execute TypeScript code in a Node.js environment with access to Canvas API.
 
         This tool enables token-efficient bulk operations by executing code locally
@@ -297,7 +290,9 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
                     sandbox_mode = "local"
                 else:
                     container_runtime = _detect_container_runtime()
-                    if container_runtime and await _runtime_available(container_runtime):
+                    if container_runtime and await _runtime_available(
+                        container_runtime
+                    ):
                         sandbox_mode = "container"
                     elif sandbox_mode_setting == "container":
                         message = (
@@ -328,8 +323,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
             if guard_path:
                 extra_node_options.append(f"--require={guard_path}")
             node_options_local = _append_node_options(
-                os.environ.get("NODE_OPTIONS"),
-                extra_node_options
+                os.environ.get("NODE_OPTIONS"), extra_node_options
             )
 
             if guard_container_path:
@@ -340,8 +334,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
                     )
                 container_extra_options.append(f"--require={guard_container_path}")
                 node_options_container = _append_node_options(
-                    os.environ.get("NODE_OPTIONS"),
-                    container_extra_options
+                    os.environ.get("NODE_OPTIONS"), container_extra_options
                 )
             else:
                 node_options_container = node_options_local
@@ -349,10 +342,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
         # Create a temporary file for the code
         temp_file_path: str | None = None
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.ts',
-            dir=code_api_dir,
-            delete=False
+            mode="w", suffix=".ts", dir=code_api_dir, delete=False
         ) as temp_file:
             # Write the user's code
             temp_file.write(code)
@@ -361,8 +351,8 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
         try:
             # Prepare environment variables
             env = os.environ.copy()
-            env['CANVAS_API_URL'] = config.canvas_api_url
-            env['CANVAS_API_TOKEN'] = config.canvas_api_token
+            env["CANVAS_API_URL"] = config.canvas_api_url
+            env["CANVAS_API_TOKEN"] = config.canvas_api_token
             if node_options_local:
                 env["NODE_OPTIONS"] = node_options_local
 
@@ -370,9 +360,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
             if sandbox_enabled and config.ts_sandbox_timeout_sec > 0:
                 effective_timeout = min(timeout, config.ts_sandbox_timeout_sec)
                 if effective_timeout != timeout:
-                    message = (
-                        f"Timeout reduced to {effective_timeout} seconds by TS_SANDBOX_TIMEOUT_SEC."
-                    )
+                    message = f"Timeout reduced to {effective_timeout} seconds by TS_SANDBOX_TIMEOUT_SEC."
                     warnings.append(message)
                     log_warning(message)
 
@@ -393,49 +381,51 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
                 if config.ts_sandbox_cpu_limit > 0:
                     cmd.extend(["--ulimit", f"cpu={config.ts_sandbox_cpu_limit}"])
 
-                cmd.extend([
-                    "-v",
-                    f"{repo_root}:/workspace",
-                    "-w",
-                    "/workspace",
-                    "-e",
-                    f"CANVAS_API_URL={config.canvas_api_url}",
-                    "-e",
-                    f"CANVAS_API_TOKEN={config.canvas_api_token}",
-                ])
+                cmd.extend(
+                    [
+                        "-v",
+                        f"{repo_root}:/workspace",
+                        "-w",
+                        "/workspace",
+                        "-e",
+                        f"CANVAS_API_URL={config.canvas_api_url}",
+                        "-e",
+                        f"CANVAS_API_TOKEN={config.canvas_api_token}",
+                    ]
+                )
                 if node_options_container:
                     cmd.extend(["-e", f"NODE_OPTIONS={node_options_container}"])
 
-                cmd.extend([
-                    config.ts_sandbox_container_image,
-                    "npx",
-                    "tsx",
-                    container_code_path
-                ])
+                cmd.extend(
+                    [
+                        config.ts_sandbox_container_image,
+                        "npx",
+                        "tsx",
+                        container_code_path,
+                    ]
+                )
             else:
-                cmd = [
-                    'npx',
-                    'tsx',  # Try tsx first
-                    temp_file_path
-                ]
+                cmd = ["npx", "tsx", temp_file_path]  # Try tsx first
 
             # Run the TypeScript code
             preexec_fn = None
-            if sandbox_enabled and config.ts_sandbox_cpu_limit > 0 and sandbox_mode == "local":
+            if (
+                sandbox_enabled
+                and config.ts_sandbox_cpu_limit > 0
+                and sandbox_mode == "local"
+            ):
                 try:
                     import resource
 
                     def _limit_resources() -> None:
                         resource.setrlimit(
                             resource.RLIMIT_CPU,
-                            (config.ts_sandbox_cpu_limit, config.ts_sandbox_cpu_limit)
+                            (config.ts_sandbox_cpu_limit, config.ts_sandbox_cpu_limit),
                         )
 
                     preexec_fn = _limit_resources
                 except Exception:
-                    message = (
-                        "CPU limits could not be applied on this platform."
-                    )
+                    message = "CPU limits could not be applied on this platform."
                     warnings.append(message)
                     log_warning(message)
             process = await asyncio.create_subprocess_exec(
@@ -444,31 +434,36 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
                 cwd=str(repo_root),
-                preexec_fn=preexec_fn
+                preexec_fn=preexec_fn,
             )
 
             try:
                 stdout_bytes, stderr_bytes = await asyncio.wait_for(
-                    process.communicate(),
-                    timeout=effective_timeout
+                    process.communicate(), timeout=effective_timeout
                 )
 
-                stdout = stdout_bytes.decode('utf-8', errors='replace')
-                stderr = stderr_bytes.decode('utf-8', errors='replace')
+                stdout = stdout_bytes.decode("utf-8", errors="replace")
+                stderr = stderr_bytes.decode("utf-8", errors="replace")
 
                 # Format output
                 result_lines = []
 
                 if process.returncode == 0:
-                    result_lines.append("✅ TypeScript execution completed successfully\n")
+                    result_lines.append(
+                        "✅ TypeScript execution completed successfully\n"
+                    )
                 else:
-                    result_lines.append(f"❌ TypeScript execution failed with exit code {process.returncode}\n")
+                    result_lines.append(
+                        f"❌ TypeScript execution failed with exit code {process.returncode}\n"
+                    )
 
                 if sandbox_enabled:
                     result_lines.append("=== Sandbox ===")
                     result_lines.append(f"Mode: {sandbox_mode}")
                     if block_outbound:
-                        allowlist_label = ", ".join(allowlist_hosts) if allowlist_hosts else "none"
+                        allowlist_label = (
+                            ", ".join(allowlist_hosts) if allowlist_hosts else "none"
+                        )
                         result_lines.append(f"Network allowlist: {allowlist_label}")
                     if config.ts_sandbox_memory_limit_mb > 0:
                         result_lines.append(
@@ -492,7 +487,7 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
 
                 return "\n".join(result_lines) if result_lines else "No output"
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
                 return f"❌ Execution timed out after {effective_timeout} seconds"
@@ -556,14 +551,14 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
 
         for ts_file in code_api_dir.rglob("*.ts"):
             # Skip certain files
-            if ts_file.name in ['index.ts', 'client.ts']:
+            if ts_file.name in ["index.ts", "client.ts"]:
                 continue
 
             # Get relative path from code_api
             rel_path = ts_file.relative_to(code_api_dir)
 
             # Get category (parent directory name)
-            category = rel_path.parent.name if rel_path.parent.name != '.' else 'root'
+            category = rel_path.parent.name if rel_path.parent.name != "." else "root"
 
             # Get import path (convert .ts to .js for ESM imports)
             import_path = f"./{rel_path.parent}/{rel_path.stem}.js"
@@ -596,8 +591,12 @@ def register_code_execution_tools(mcp: FastMCP) -> None:
 
         result_lines.append("Example Usage:")
         result_lines.append("```typescript")
-        result_lines.append("import { bulkGrade } from './canvas/grading/bulkGrade.js';")
-        result_lines.append("import { listSubmissions } from './canvas/assignments/listSubmissions.js';")
+        result_lines.append(
+            "import { bulkGrade } from './canvas/grading/bulkGrade.js';"
+        )
+        result_lines.append(
+            "import { listSubmissions } from './canvas/assignments/listSubmissions.js';"
+        )
         result_lines.append("")
         result_lines.append("// Your code here...")
         result_lines.append("```")

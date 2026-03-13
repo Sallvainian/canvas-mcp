@@ -16,7 +16,7 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
     @mcp.resource(
         name="course-syllabus",
         description="Get the syllabus for a specific course",
-        uri="canvas://course/{course_identifier}/syllabus"
+        uri="canvas://course/{course_identifier}/syllabus",
     )
     async def get_course_syllabus(course_identifier: str) -> str:
         """Get the syllabus for a specific course."""
@@ -27,7 +27,7 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
         if "error" in response:
             return f"Error fetching syllabus: {response['error']}"
 
-        syllabus_body = response.get("syllabus_body", "")
+        syllabus_body: str = str(response.get("syllabus_body", ""))
 
         if not syllabus_body:
             return "No syllabus available for this course."
@@ -37,10 +37,12 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
     @mcp.resource(
         name="assignment-description",
         description="Get the description for a specific assignment",
-        uri="canvas://course/{course_identifier}/assignment/{assignment_id}/description"
+        uri="canvas://course/{course_identifier}/assignment/{assignment_id}/description",
     )
     @validate_params
-    async def get_assignment_description(course_identifier: str | int, assignment_id: str | int) -> str:
+    async def get_assignment_description(
+        course_identifier: str | int, assignment_id: str | int
+    ) -> str:
         """Get the description for a specific assignment."""
         course_id = await get_course_id(course_identifier)
 
@@ -54,7 +56,7 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
         if "error" in response:
             return f"Error fetching assignment description: {response['error']}"
 
-        description = response.get("description", "")
+        description: str = str(response.get("description", ""))
 
         if not description:
             return "No description available for this assignment."
@@ -62,8 +64,7 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
         return description
 
     @mcp.prompt(
-        name="summarize-course",
-        description="Generate a summary of a Canvas course"
+        name="summarize-course", description="Generate a summary of a Canvas course"
     )
     async def summarize_course(course_identifier: str) -> list[dict[str, Any]]:
         """Generate a summary of a Canvas course."""
@@ -73,26 +74,39 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
         course_response = await make_canvas_request("get", f"/courses/{course_id}")
 
         if "error" in course_response:
-            return [{"role": "user", "content": f"Error fetching course: {course_response['error']}"}]
+            return [
+                {
+                    "role": "user",
+                    "content": f"Error fetching course: {course_response['error']}",
+                }
+            ]
 
         # Get assignments
-        assignments_response = await fetch_all_paginated_results(f"/courses/{course_id}/assignments")
+        assignments_response = await fetch_all_paginated_results(
+            f"/courses/{course_id}/assignments"
+        )
 
         if isinstance(assignments_response, dict) and "error" in assignments_response:
             assignments_info = "Error fetching assignments"
         else:
             assignments_count = len(assignments_response)
             from datetime import datetime
+
             current_date = datetime.now().isoformat()
             upcoming_assignments = [
-                a for a in assignments_response
+                a
+                for a in assignments_response
                 if a.get("due_at") and a.get("due_at") > current_date
             ]
             upcoming_count = len(upcoming_assignments)
-            assignments_info = f"{assignments_count} total assignments, {upcoming_count} upcoming"
+            assignments_info = (
+                f"{assignments_count} total assignments, {upcoming_count} upcoming"
+            )
 
         # Get modules
-        modules_response = await fetch_all_paginated_results(f"/courses/{course_id}/modules")
+        modules_response = await fetch_all_paginated_results(
+            f"/courses/{course_id}/modules"
+        )
 
         if isinstance(modules_response, dict) and "error" in modules_response:
             modules_info = "Error fetching modules"
@@ -105,8 +119,13 @@ def register_resources_and_prompts(mcp: FastMCP) -> None:
         course_code = course_response.get("course_code", "No code")
 
         return [
-            {"role": "system", "content": "You are a helpful assistant that summarizes Canvas course information."},
-            {"role": "user", "content": f"""
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that summarizes Canvas course information.",
+            },
+            {
+                "role": "user",
+                "content": f"""
 Please provide a summary of the Canvas course:
 
 Course: {course_name} ({course_code})
@@ -115,13 +134,14 @@ Assignments: {assignments_info}
 Modules: {modules_info}
 
 Summarize the key information about this course and suggest what the user might want to know about it.
-            """}
+            """,
+            },
         ]
 
     @mcp.resource(
         name="code-api-file",
         description="Read TypeScript code execution API files",
-        uri="canvas://code-api/{file_path}"
+        uri="canvas://code-api/{file_path}",
     )
     async def get_code_api_file(file_path: str) -> str:
         """Get the contents of a TypeScript file from the code execution API.
@@ -155,12 +175,12 @@ Summarize the key information about this course and suggest what the user might 
             return f"❌ Error: File not found: {file_path}"
 
         # Check if it's a TypeScript file
-        if full_path.suffix not in ['.ts', '.js', '.mts', '.mjs']:
-            return f"❌ Error: Only TypeScript/JavaScript files are accessible"
+        if full_path.suffix not in [".ts", ".js", ".mts", ".mjs"]:
+            return "❌ Error: Only TypeScript/JavaScript files are accessible"
 
         # Read and return the file
         try:
-            with open(full_path, 'r', encoding='utf-8') as f:
+            with open(full_path, encoding="utf-8") as f:
                 content = f.read()
 
             # Add helpful header

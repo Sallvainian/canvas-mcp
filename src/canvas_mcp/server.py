@@ -19,6 +19,7 @@ from .resources import register_resources_and_prompts
 from .tools import (
     register_accessibility_tools,
     register_analytics_tools,
+    register_assignment_analytics_tools,
     register_assignment_tools,
     register_code_execution_tools,
     register_content_migration_tools,
@@ -30,11 +31,11 @@ from .tools import (
     register_gradebook_tools,
     register_messaging_tools,
     register_module_tools,
-    register_other_tools,
     register_page_tools,
     register_peer_review_comment_tools,
     register_peer_review_tools,
     register_quiz_tools,
+    register_rubric_grading_tools,
     register_rubric_tools,
     register_search_helper_tools,
     register_student_tools,
@@ -58,13 +59,14 @@ def register_all_tools(mcp: FastMCP) -> None:
     # Always register shared and educator tools
     register_course_tools(mcp)
     register_assignment_tools(mcp)
+    register_assignment_analytics_tools(mcp)
     register_discussion_tools(mcp)
     register_discussion_analytics_tools(mcp)
     register_enrollment_tools(mcp)
     register_module_tools(mcp)
-    register_other_tools(mcp)
     register_page_tools(mcp)
     register_rubric_tools(mcp)
+    register_rubric_grading_tools(mcp)
     register_peer_review_tools(mcp)
     register_peer_review_comment_tools(mcp)
     register_messaging_tools(mcp)
@@ -129,22 +131,18 @@ def main() -> None:
         description="Canvas MCP Server - AI-powered Canvas LMS integration"
     )
     parser.add_argument(
-        "--test",
-        action="store_true",
-        help="Test Canvas API connection and exit"
+        "--test", action="store_true", help="Test Canvas API connection and exit"
     )
     parser.add_argument(
-        "--config",
-        action="store_true",
-        help="Show current configuration and exit"
+        "--config", action="store_true", help="Show current configuration and exit"
     )
 
     args = parser.parse_args()
 
     # Validate configuration
     if not validate_config():
-        print("\nPlease check your .env file configuration.", file=sys.stderr)
-        print("Use the env.template file as a reference.", file=sys.stderr)
+        log_error("Please check your .env file configuration.")
+        log_error("Use the env.template file as a reference.")
         sys.exit(1)
 
     config = get_config()
@@ -167,24 +165,21 @@ def main() -> None:
             if config.ts_sandbox_timeout_sec > 0:
                 print(
                     f"  Sandbox Timeout: {config.ts_sandbox_timeout_sec}s",
-                    file=sys.stderr
+                    file=sys.stderr,
                 )
             if config.ts_sandbox_memory_limit_mb > 0:
                 print(
                     f"  Sandbox Memory: {config.ts_sandbox_memory_limit_mb}MB",
-                    file=sys.stderr
+                    file=sys.stderr,
                 )
             if config.ts_sandbox_cpu_limit > 0:
                 print(
                     f"  Sandbox CPU Limit: {config.ts_sandbox_cpu_limit}s",
-                    file=sys.stderr
+                    file=sys.stderr,
                 )
             if config.ts_sandbox_block_outbound_network:
                 allowlist = config.ts_sandbox_allowlist_hosts or "canvas API only"
-                print(
-                    f"  Sandbox Network Allowlist: {allowlist}",
-                    file=sys.stderr
-                )
+                print(f"  Sandbox Network Allowlist: {allowlist}", file=sys.stderr)
         if config.institution_name:
             print(f"  Institution: {config.institution_name}", file=sys.stderr)
         sys.exit(0)
@@ -218,6 +213,7 @@ def main() -> None:
     finally:
         # Cleanup HTTP client resources
         import asyncio
+
         from .core.client import cleanup_http_client
 
         asyncio.run(cleanup_http_client())

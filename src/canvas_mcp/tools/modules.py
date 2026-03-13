@@ -4,7 +4,7 @@ Provides tools for creating, updating, and managing Canvas course modules
 and module items. Modules are the primary content organization system in Canvas.
 """
 
-from typing import Optional, Union
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -14,15 +14,15 @@ from ..core.dates import format_date, parse_date
 from ..core.validation import validate_params
 
 
-def register_module_tools(mcp: FastMCP):
+def register_module_tools(mcp: FastMCP) -> None:
     """Register all module-related MCP tools."""
 
     @mcp.tool()
     @validate_params
     async def list_modules(
-        course_identifier: Union[str, int],
+        course_identifier: str | int,
         include_items: bool = False,
-        search_term: Optional[str] = None
+        search_term: str | None = None,
     ) -> str:
         """List all modules in a course.
 
@@ -33,7 +33,7 @@ def register_module_tools(mcp: FastMCP):
         """
         course_id = await get_course_id(course_identifier)
 
-        params = {"per_page": 100}
+        params: dict[str, object] = {"per_page": 100}
         if include_items:
             params["include[]"] = ["items"]
         if search_term:
@@ -47,7 +47,7 @@ def register_module_tools(mcp: FastMCP):
             return f"Error fetching modules: {modules['error']}"
 
         if not modules:
-            return f"No modules found in course."
+            return "No modules found in course."
 
         course_display = await get_course_code(course_id) or course_identifier
         result = f"Modules in {course_display}:\n\n"
@@ -72,7 +72,7 @@ def register_module_tools(mcp: FastMCP):
             if unlock_at:
                 result += f"  Unlocks: {format_date(unlock_at)}\n"
             if require_sequential:
-                result += f"  Sequential Progress: Required\n"
+                result += "  Sequential Progress: Required\n"
             if prerequisite_ids:
                 result += f"  Prerequisites: {prerequisite_ids}\n"
 
@@ -95,13 +95,13 @@ def register_module_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def create_module(
-        course_identifier: Union[str, int],
+        course_identifier: str | int,
         name: str,
-        position: Optional[int] = None,
-        unlock_at: Optional[str] = None,
+        position: int | None = None,
+        unlock_at: str | None = None,
         require_sequential_progress: bool = False,
-        prerequisite_module_ids: Optional[str] = None,
-        published: bool = True
+        prerequisite_module_ids: str | None = None,
+        published: bool = True,
     ) -> str:
         """Create a new module in a course.
 
@@ -117,13 +117,13 @@ def register_module_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Build module parameters
-        module_params = {
+        module_params: dict[str, str] = {
             "module[name]": name,
-            "module[published]": str(published).lower()
+            "module[published]": str(published).lower(),
         }
 
         if position is not None:
-            module_params["module[position]"] = position
+            module_params["module[position]"] = str(position)
 
         if unlock_at:
             parsed_date = parse_date(unlock_at)
@@ -138,16 +138,16 @@ def register_module_tools(mcp: FastMCP):
         if prerequisite_module_ids:
             # Parse comma-separated IDs
             prereq_ids = [id.strip() for id in prerequisite_module_ids.split(",")]
-            prereq_tuples = [("module[prerequisite_module_ids][]", prereq_id) for prereq_id in prereq_ids]
+            prereq_tuples = [
+                ("module[prerequisite_module_ids][]", prereq_id)
+                for prereq_id in prereq_ids
+            ]
 
         # Convert module_params dict to list of tuples and append prereq tuples
         form_data = list(module_params.items()) + prereq_tuples
 
         response = await make_canvas_request(
-            "post",
-            f"/courses/{course_id}/modules",
-            data=form_data,
-            use_form_data=True
+            "post", f"/courses/{course_id}/modules", data=form_data, use_form_data=True
         )
 
         if "error" in response:
@@ -160,7 +160,7 @@ def register_module_tools(mcp: FastMCP):
         module_published = response.get("published", False)
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module created successfully!\n\n"
+        result = "✅ Module created successfully!\n\n"
         result += f"**{module_name}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {module_id}\n"
@@ -170,21 +170,21 @@ def register_module_tools(mcp: FastMCP):
         if unlock_at:
             result += f"  Unlocks: {format_date(response.get('unlock_at'))}\n"
         if require_sequential_progress:
-            result += f"  Sequential Progress: Required\n"
+            result += "  Sequential Progress: Required\n"
 
         return result
 
     @mcp.tool()
     @validate_params
     async def update_module(
-        course_identifier: Union[str, int],
-        module_id: Union[str, int],
-        name: Optional[str] = None,
-        position: Optional[int] = None,
-        unlock_at: Optional[str] = None,
-        require_sequential_progress: Optional[bool] = None,
-        prerequisite_module_ids: Optional[str] = None,
-        published: Optional[bool] = None
+        course_identifier: str | int,
+        module_id: str | int,
+        name: str | None = None,
+        position: int | None = None,
+        unlock_at: str | None = None,
+        require_sequential_progress: bool | None = None,
+        prerequisite_module_ids: str | None = None,
+        published: bool | None = None,
     ) -> str:
         """Update an existing module's settings.
 
@@ -201,13 +201,13 @@ def register_module_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Build update parameters (only include changed fields)
-        module_params = {}
+        module_params: dict[str, str] = {}
 
         if name is not None:
             module_params["module[name]"] = name
 
         if position is not None:
-            module_params["module[position]"] = position
+            module_params["module[position]"] = str(position)
 
         if unlock_at is not None:
             if unlock_at == "":
@@ -218,7 +218,9 @@ def register_module_tools(mcp: FastMCP):
                     module_params["module[unlock_at]"] = parsed_date.isoformat()
 
         if require_sequential_progress is not None:
-            module_params["module[require_sequential_progress]"] = str(require_sequential_progress).lower()
+            module_params["module[require_sequential_progress]"] = str(
+                require_sequential_progress
+            ).lower()
 
         # Handle prerequisite module IDs - need list of tuples for httpx form data
         prereq_tuples = []
@@ -227,7 +229,10 @@ def register_module_tools(mcp: FastMCP):
                 module_params["module[prerequisite_module_ids][]"] = ""
             else:
                 prereq_ids = [id.strip() for id in prerequisite_module_ids.split(",")]
-                prereq_tuples = [("module[prerequisite_module_ids][]", prereq_id) for prereq_id in prereq_ids]
+                prereq_tuples = [
+                    ("module[prerequisite_module_ids][]", prereq_id)
+                    for prereq_id in prereq_ids
+                ]
 
         if published is not None:
             module_params["module[published]"] = str(published).lower()
@@ -242,7 +247,7 @@ def register_module_tools(mcp: FastMCP):
             "put",
             f"/courses/{course_id}/modules/{module_id}",
             data=form_data,
-            use_form_data=True
+            use_form_data=True,
         )
 
         if "error" in response:
@@ -254,7 +259,7 @@ def register_module_tools(mcp: FastMCP):
         module_published = response.get("published", False)
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module updated successfully!\n\n"
+        result = "✅ Module updated successfully!\n\n"
         result += f"**{module_name}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {module_id}\n"
@@ -264,16 +269,13 @@ def register_module_tools(mcp: FastMCP):
         if response.get("unlock_at"):
             result += f"  Unlocks: {format_date(response.get('unlock_at'))}\n"
         if response.get("require_sequential_progress"):
-            result += f"  Sequential Progress: Required\n"
+            result += "  Sequential Progress: Required\n"
 
         return result
 
     @mcp.tool()
     @validate_params
-    async def delete_module(
-        course_identifier: Union[str, int],
-        module_id: Union[str, int]
-    ) -> str:
+    async def delete_module(course_identifier: str | int, module_id: str | int) -> str:
         """Delete a module from a course.
 
         Warning: This permanently removes the module and all its item associations.
@@ -288,8 +290,7 @@ def register_module_tools(mcp: FastMCP):
 
         # First get module info for confirmation
         module_response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/modules/{module_id}"
+            "get", f"/courses/{course_id}/modules/{module_id}"
         )
 
         module_name = "Unknown"
@@ -300,37 +301,38 @@ def register_module_tools(mcp: FastMCP):
 
         # Delete the module
         response = await make_canvas_request(
-            "delete",
-            f"/courses/{course_id}/modules/{module_id}"
+            "delete", f"/courses/{course_id}/modules/{module_id}"
         )
 
         if isinstance(response, dict) and "error" in response:
             return f"Error deleting module: {response['error']}"
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module deleted successfully!\n\n"
+        result = "✅ Module deleted successfully!\n\n"
         result += f"  Deleted: **{module_name}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {module_id}\n"
-        result += f"  Items affected: {items_count} (items unlinked, content preserved)\n"
+        result += (
+            f"  Items affected: {items_count} (items unlinked, content preserved)\n"
+        )
 
         return result
 
     @mcp.tool()
     @validate_params
     async def add_module_item(
-        course_identifier: Union[str, int],
-        module_id: Union[str, int],
+        course_identifier: str | int,
+        module_id: str | int,
         item_type: str,
-        content_id: Optional[Union[str, int]] = None,
-        title: Optional[str] = None,
-        position: Optional[int] = None,
-        indent: Optional[int] = None,
-        page_url: Optional[str] = None,
-        external_url: Optional[str] = None,
+        content_id: str | int | None = None,
+        title: str | None = None,
+        position: int | None = None,
+        indent: int | None = None,
+        page_url: str | None = None,
+        external_url: str | None = None,
         new_tab: bool = False,
-        completion_requirement_type: Optional[str] = None,
-        completion_requirement_min_score: Optional[int] = None
+        completion_requirement_type: str | None = None,
+        completion_requirement_min_score: int | None = None,
     ) -> str:
         """Add an item to a module.
 
@@ -354,18 +356,30 @@ def register_module_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Validate item type
-        valid_types = ["File", "Page", "Discussion", "Assignment", "Quiz",
-                      "SubHeader", "ExternalUrl", "ExternalTool"]
+        valid_types = [
+            "File",
+            "Page",
+            "Discussion",
+            "Assignment",
+            "Quiz",
+            "SubHeader",
+            "ExternalUrl",
+            "ExternalTool",
+        ]
         if item_type not in valid_types:
             return f"Invalid item_type '{item_type}'. Must be one of: {', '.join(valid_types)}"
 
         # Build item parameters
-        item_params = {
-            "module_item[type]": item_type
-        }
+        item_params: dict[str, Any] = {"module_item[type]": item_type}
 
         # Handle content_id requirement
-        types_requiring_content_id = ["File", "Discussion", "Assignment", "Quiz", "ExternalTool"]
+        types_requiring_content_id = [
+            "File",
+            "Discussion",
+            "Assignment",
+            "Quiz",
+            "ExternalTool",
+        ]
         if item_type in types_requiring_content_id:
             if content_id is None:
                 return f"content_id is required for {item_type} items"
@@ -407,23 +421,32 @@ def register_module_tools(mcp: FastMCP):
 
         # Completion requirements
         if completion_requirement_type:
-            valid_completion_types = ["must_view", "must_submit", "must_contribute",
-                                     "min_score", "must_mark_done"]
+            valid_completion_types = [
+                "must_view",
+                "must_submit",
+                "must_contribute",
+                "min_score",
+                "must_mark_done",
+            ]
             if completion_requirement_type not in valid_completion_types:
                 return f"Invalid completion_requirement_type. Must be one of: {', '.join(valid_completion_types)}"
 
-            item_params["module_item[completion_requirement][type]"] = completion_requirement_type
+            item_params["module_item[completion_requirement][type]"] = (
+                completion_requirement_type
+            )
 
             if completion_requirement_type == "min_score":
                 if completion_requirement_min_score is None:
                     return "completion_requirement_min_score is required when type is 'min_score'"
-                item_params["module_item[completion_requirement][min_score]"] = completion_requirement_min_score
+                item_params["module_item[completion_requirement][min_score]"] = (
+                    completion_requirement_min_score
+                )
 
         response = await make_canvas_request(
             "post",
             f"/courses/{course_id}/modules/{module_id}/items",
             data=item_params,
-            use_form_data=True
+            use_form_data=True,
         )
 
         if "error" in response:
@@ -436,7 +459,7 @@ def register_module_tools(mcp: FastMCP):
         item_indent = response.get("indent", 0)
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module item added successfully!\n\n"
+        result = "✅ Module item added successfully!\n\n"
         result += f"**{item_title}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {module_id}\n"
@@ -465,18 +488,18 @@ def register_module_tools(mcp: FastMCP):
     @mcp.tool()
     @validate_params
     async def update_module_item(
-        course_identifier: Union[str, int],
-        module_id: Union[str, int],
-        item_id: Union[str, int],
-        title: Optional[str] = None,
-        position: Optional[int] = None,
-        indent: Optional[int] = None,
-        external_url: Optional[str] = None,
-        new_tab: Optional[bool] = None,
-        completion_requirement_type: Optional[str] = None,
-        completion_requirement_min_score: Optional[int] = None,
-        published: Optional[bool] = None,
-        move_to_module_id: Optional[Union[str, int]] = None
+        course_identifier: str | int,
+        module_id: str | int,
+        item_id: str | int,
+        title: str | None = None,
+        position: int | None = None,
+        indent: int | None = None,
+        external_url: str | None = None,
+        new_tab: bool | None = None,
+        completion_requirement_type: str | None = None,
+        completion_requirement_min_score: int | None = None,
+        published: bool | None = None,
+        move_to_module_id: str | int | None = None,
     ) -> str:
         """Update an existing module item.
 
@@ -497,7 +520,7 @@ def register_module_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Build update parameters
-        item_params = {}
+        item_params: dict[str, Any] = {}
 
         if title is not None:
             item_params["module_item[title]"] = title
@@ -528,17 +551,26 @@ def register_module_tools(mcp: FastMCP):
                 # Remove completion requirement
                 item_params["module_item[completion_requirement][type]"] = ""
             else:
-                valid_completion_types = ["must_view", "must_submit", "must_contribute",
-                                         "min_score", "must_mark_done"]
+                valid_completion_types = [
+                    "must_view",
+                    "must_submit",
+                    "must_contribute",
+                    "min_score",
+                    "must_mark_done",
+                ]
                 if completion_requirement_type not in valid_completion_types:
                     return f"Invalid completion_requirement_type. Must be one of: {', '.join(valid_completion_types)}"
 
-                item_params["module_item[completion_requirement][type]"] = completion_requirement_type
+                item_params["module_item[completion_requirement][type]"] = (
+                    completion_requirement_type
+                )
 
                 if completion_requirement_type == "min_score":
                     if completion_requirement_min_score is None:
                         return "completion_requirement_min_score is required when type is 'min_score'"
-                    item_params["module_item[completion_requirement][min_score]"] = completion_requirement_min_score
+                    item_params["module_item[completion_requirement][min_score]"] = (
+                        completion_requirement_min_score
+                    )
 
         if not item_params:
             return "No changes specified. Please provide at least one field to update."
@@ -547,7 +579,7 @@ def register_module_tools(mcp: FastMCP):
             "put",
             f"/courses/{course_id}/modules/{module_id}/items/{item_id}",
             data=item_params,
-            use_form_data=True
+            use_form_data=True,
         )
 
         if "error" in response:
@@ -560,7 +592,7 @@ def register_module_tools(mcp: FastMCP):
         item_published = response.get("published", False)
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module item updated successfully!\n\n"
+        result = "✅ Module item updated successfully!\n\n"
         result += f"**{item_title}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {response.get('module_id', module_id)}\n"
@@ -569,17 +601,81 @@ def register_module_tools(mcp: FastMCP):
         result += f"  Position: {item_position}\n"
         result += f"  Published: {'Yes' if item_published else 'No'}\n"
 
-        if move_to_module_id and str(response.get("module_id")) == str(move_to_module_id):
+        if move_to_module_id and str(response.get("module_id")) == str(
+            move_to_module_id
+        ):
             result += f"  ✓ Moved to module {move_to_module_id}\n"
 
         return result
 
     @mcp.tool()
     @validate_params
+    async def list_module_items(
+        course_identifier: str | int,
+        module_id: str | int,
+        include_content_details: bool = True,
+    ) -> str:
+        """List items within a specific module, including pages.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            module_id: The module ID
+            include_content_details: Whether to include additional details about content items
+        """
+        course_id = await get_course_id(course_identifier)
+
+        params: dict[str, object] = {"per_page": 100}
+        if include_content_details:
+            params["include[]"] = ["content_details"]
+
+        items = await fetch_all_paginated_results(
+            f"/courses/{course_id}/modules/{module_id}/items", params
+        )
+
+        if isinstance(items, dict) and "error" in items:
+            return f"Error fetching module items: {items['error']}"
+
+        if not items:
+            return f"No items found in module {module_id}."
+
+        # Get module details for context
+        module_response = await make_canvas_request(
+            "get", f"/courses/{course_id}/modules/{module_id}"
+        )
+
+        module_name = "Unknown Module"
+        if "error" not in module_response:
+            module_name = module_response.get("name", "Unknown Module")
+
+        course_display = await get_course_code(course_id) or course_identifier
+        result = f"Module Items for '{module_name}' in Course {course_display}:\n\n"
+
+        for item in items:
+            item_id_val = item.get("id")
+            title = item.get("title", "Untitled")
+            item_type = item.get("type", "Unknown")
+            content_id = item.get("content_id")
+            url = item.get("url", "")
+            external_url = item.get("external_url", "")
+            published = item.get("published", False)
+
+            result += f"Item: {title}\n"
+            result += f"Type: {item_type}\n"
+            result += f"ID: {item_id_val}\n"
+            if content_id:
+                result += f"Content ID: {content_id}\n"
+            if url:
+                result += f"URL: {url}\n"
+            if external_url:
+                result += f"External URL: {external_url}\n"
+            result += f"Published: {'Yes' if published else 'No'}\n\n"
+
+        return result
+
+    @mcp.tool()
+    @validate_params
     async def delete_module_item(
-        course_identifier: Union[str, int],
-        module_id: Union[str, int],
-        item_id: Union[str, int]
+        course_identifier: str | int, module_id: str | int, item_id: str | int
     ) -> str:
         """Remove an item from a module.
 
@@ -595,8 +691,7 @@ def register_module_tools(mcp: FastMCP):
 
         # First get item info for confirmation
         item_response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/modules/{module_id}/items/{item_id}"
+            "get", f"/courses/{course_id}/modules/{module_id}/items/{item_id}"
         )
 
         item_title = "Unknown"
@@ -607,19 +702,18 @@ def register_module_tools(mcp: FastMCP):
 
         # Delete the item
         response = await make_canvas_request(
-            "delete",
-            f"/courses/{course_id}/modules/{module_id}/items/{item_id}"
+            "delete", f"/courses/{course_id}/modules/{module_id}/items/{item_id}"
         )
 
         if isinstance(response, dict) and "error" in response:
             return f"Error deleting module item: {response['error']}"
 
         course_display = await get_course_code(course_id) or course_identifier
-        result = f"✅ Module item removed successfully!\n\n"
+        result = "✅ Module item removed successfully!\n\n"
         result += f"  Removed: **{item_title}** ({item_type})\n"
         result += f"  Course: {course_display}\n"
         result += f"  Module ID: {module_id}\n"
         result += f"  Item ID: {item_id}\n"
-        result += f"\n  Note: The underlying content was NOT deleted, only unlinked from this module.\n"
+        result += "\n  Note: The underlying content was NOT deleted, only unlinked from this module.\n"
 
         return result

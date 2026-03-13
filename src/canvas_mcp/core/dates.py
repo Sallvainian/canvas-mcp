@@ -19,11 +19,11 @@ For token efficiency, this module also provides smart date formatting modes:
 """
 
 import datetime
-import sys
 from typing import Literal
 
 from dateutil import parser as date_parser
 
+from .logging import log_warning
 
 # Type alias for date format modes
 DateFormatMode = Literal["standard", "compact", "relative"]
@@ -50,16 +50,15 @@ def parse_date(date_str: str | None) -> datetime.datetime | None:
     # Try different date formats
     formats = [
         # ISO 8601 formats
-        '%Y-%m-%dT%H:%M:%SZ',  # 2023-01-15T14:30:00Z
-        '%Y-%m-%dT%H:%M:%S.%fZ',  # 2023-01-15T14:30:00.000Z
-        '%Y-%m-%dT%H:%M:%S%z',  # 2023-01-15T14:30:00+0000
-        '%Y-%m-%dT%H:%M:%S.%f%z',  # 2023-01-15T14:30:00.000+0000
-
+        "%Y-%m-%dT%H:%M:%SZ",  # 2023-01-15T14:30:00Z
+        "%Y-%m-%dT%H:%M:%S.%fZ",  # 2023-01-15T14:30:00.000Z
+        "%Y-%m-%dT%H:%M:%S%z",  # 2023-01-15T14:30:00+0000
+        "%Y-%m-%dT%H:%M:%S.%f%z",  # 2023-01-15T14:30:00.000+0000
         # Common date formats
-        '%Y-%m-%d %H:%M:%S',  # 2023-01-15 14:30:00
-        '%Y-%m-%d',  # 2023-01-15
-        '%m/%d/%Y %H:%M:%S',  # 01/15/2023 14:30:00
-        '%m/%d/%Y',  # 01/15/2023
+        "%Y-%m-%d %H:%M:%S",  # 2023-01-15 14:30:00
+        "%Y-%m-%d",  # 2023-01-15
+        "%m/%d/%Y %H:%M:%S",  # 01/15/2023 14:30:00
+        "%m/%d/%Y",  # 01/15/2023
     ]
 
     for fmt in formats:
@@ -68,14 +67,14 @@ def parse_date(date_str: str | None) -> datetime.datetime | None:
 
             # If no timezone info, assume UTC
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=datetime.timezone.utc)
+                dt = dt.replace(tzinfo=datetime.UTC)
 
             return dt
         except ValueError:
             continue
 
     # If all parsing attempts fail, return None
-    print(f"Warning: Could not parse date string: {date_str}", file=sys.stderr)
+    log_warning(f"Could not parse date string: {date_str}")
     return None
 
 
@@ -99,10 +98,10 @@ def format_date(date_str: str | None) -> str:
         return date_str  # Return original if parsing fails
 
     # Format to ISO 8601 with Z for UTC or offset for other timezones
-    if dt.tzinfo == datetime.timezone.utc:
-        return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    if dt.tzinfo == datetime.UTC:
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     else:
-        return dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+        return dt.strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
 def truncate_text(text: str, max_length: int = 100) -> str:
@@ -110,13 +109,10 @@ def truncate_text(text: str, max_length: int = 100) -> str:
     if not text or len(text) <= max_length:
         return text
 
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."
 
 
-def format_date_smart(
-    date_str: str | None,
-    mode: DateFormatMode = "standard"
-) -> str:
+def format_date_smart(date_str: str | None, mode: DateFormatMode = "standard") -> str:
     """Format a date string with configurable verbosity for token efficiency.
 
     Args:
@@ -138,22 +134,22 @@ def format_date_smart(
 
     if mode == "standard":
         # Full ISO 8601 format
-        if dt.tzinfo == datetime.timezone.utc:
-            return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+        if dt.tzinfo == datetime.UTC:
+            return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         else:
-            return dt.strftime('%Y-%m-%dT%H:%M:%S%z')
+            return dt.strftime("%Y-%m-%dT%H:%M:%S%z")
 
     elif mode == "compact":
         # Short month-day format (most token efficient)
         # Include year only if not current year
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         if dt.year != now.year:
-            return dt.strftime('%b %d %Y')
-        return dt.strftime('%b %d')
+            return dt.strftime("%b %d %Y")
+        return dt.strftime("%b %d")
 
     elif mode == "relative":
         # Relative time format
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         delta = dt - now
         total_seconds = int(delta.total_seconds())
         abs_seconds = abs(total_seconds)
@@ -188,10 +184,8 @@ def format_date_smart(
 
         # Fall back to compact for dates more than a week away
         if dt.year != now.year:
-            return dt.strftime('%b %d %Y')
-        return dt.strftime('%b %d')
-
-    return date_str  # Fallback
+            return dt.strftime("%b %d %Y")
+        return dt.strftime("%b %d")
 
 
 def format_datetime_compact(date_str: str | None) -> str:
@@ -212,10 +206,10 @@ def format_datetime_compact(date_str: str | None) -> str:
     if not dt:
         return date_str
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     if dt.year != now.year:
-        return dt.strftime('%b %d %Y %H:%M')
-    return dt.strftime('%b %d %H:%M')
+        return dt.strftime("%b %d %Y %H:%M")
+    return dt.strftime("%b %d %H:%M")
 
 
 def parse_to_iso8601(date_string: str, end_of_day: bool = True) -> str:
@@ -268,9 +262,9 @@ def parse_to_iso8601(date_string: str, end_of_day: bool = True) -> str:
     # Ensure UTC timezone
     if parsed.tzinfo is None:
         # Naive datetime: assume it's already in UTC
-        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+        parsed = parsed.replace(tzinfo=datetime.UTC)
     else:
         # Timezone-aware datetime: convert to UTC
-        parsed = parsed.astimezone(datetime.timezone.utc)
+        parsed = parsed.astimezone(datetime.UTC)
 
     return parsed.strftime("%Y-%m-%dT%H:%M:%SZ")

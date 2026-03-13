@@ -9,7 +9,7 @@ from ..core.peer_reviews import PeerReviewAnalyzer
 from ..core.validation import validate_params
 
 
-def register_peer_review_tools(mcp: FastMCP):
+def register_peer_review_tools(mcp: FastMCP) -> None:
     """Register all peer review analytics MCP tools."""
 
     @mcp.tool()
@@ -18,7 +18,7 @@ def register_peer_review_tools(mcp: FastMCP):
         course_identifier: str | int,
         assignment_id: str | int,
         include_names: bool = True,
-        include_submission_details: bool = False
+        include_submission_details: bool = False,
     ) -> str:
         """Get comprehensive peer review assignment mapping showing who is assigned to review whom with accurate completion status.
 
@@ -30,13 +30,15 @@ def register_peer_review_tools(mcp: FastMCP):
         """
         try:
             course_id = await get_course_id(course_identifier)
+            if course_id is None:
+                return f"Error: Could not resolve course '{course_identifier}'"
             analyzer = PeerReviewAnalyzer()
 
             result = await analyzer.get_assignments(
-                course_id=course_id,
+                course_id=int(course_id),
                 assignment_id=int(assignment_id),
                 include_names=include_names,
-                include_submission_details=include_submission_details
+                include_submission_details=include_submission_details,
             )
 
             if "error" in result:
@@ -53,7 +55,7 @@ def register_peer_review_tools(mcp: FastMCP):
         course_identifier: str | int,
         assignment_id: str | int,
         include_student_details: bool = True,
-        group_by_status: bool = True
+        group_by_status: bool = True,
     ) -> str:
         """Get detailed analytics on peer review completion rates with student-by-student breakdown and summary statistics.
 
@@ -65,17 +67,21 @@ def register_peer_review_tools(mcp: FastMCP):
         """
         try:
             course_id = await get_course_id(course_identifier)
+            if course_id is None:
+                return f"Error: Could not resolve course '{course_identifier}'"
             analyzer = PeerReviewAnalyzer()
 
             result = await analyzer.get_completion_analytics(
-                course_id=course_id,
+                course_id=int(course_id),
                 assignment_id=int(assignment_id),
                 include_student_details=include_student_details,
-                group_by_status=group_by_status
+                group_by_status=group_by_status,
             )
 
             if "error" in result:
-                return f"Error getting peer review completion analytics: {result['error']}"
+                return (
+                    f"Error getting peer review completion analytics: {result['error']}"
+                )
 
             return json.dumps(result, indent=2)
 
@@ -93,7 +99,7 @@ def register_peer_review_tools(mcp: FastMCP):
         include_action_items: bool = True,
         include_timeline_analysis: bool = True,
         save_to_file: bool = False,
-        filename: str = None
+        filename: str | None = None,
     ) -> str:
         """Generate comprehensive peer review completion report with executive summary, detailed analytics, and actionable follow-up recommendations.
 
@@ -110,16 +116,18 @@ def register_peer_review_tools(mcp: FastMCP):
         """
         try:
             course_id = await get_course_id(course_identifier)
+            if course_id is None:
+                return f"Error: Could not resolve course '{course_identifier}'"
             analyzer = PeerReviewAnalyzer()
 
             result = await analyzer.generate_report(
-                course_id=course_id,
+                course_id=int(course_id),
                 assignment_id=int(assignment_id),
                 report_format=report_format,
                 include_executive_summary=include_executive_summary,
                 include_student_details=include_student_details,
                 include_action_items=include_action_items,
-                include_timeline_analysis=include_timeline_analysis
+                include_timeline_analysis=include_timeline_analysis,
             )
 
             if "error" in result:
@@ -136,14 +144,14 @@ def register_peer_review_tools(mcp: FastMCP):
 
                 try:
                     # Save to current working directory
-                    with open(filename, 'w', encoding='utf-8') as f:
+                    with open(filename, "w", encoding="utf-8") as f:
                         f.write(result["report"])
                     result["saved_to"] = os.path.abspath(filename)
                 except Exception as save_error:
                     result["save_error"] = f"Failed to save file: {str(save_error)}"
 
             if report_format in ["csv", "markdown"]:
-                return result.get("report", json.dumps(result, indent=2))
+                return str(result.get("report", json.dumps(result, indent=2)))
             else:
                 return json.dumps(result, indent=2)
 
@@ -157,7 +165,7 @@ def register_peer_review_tools(mcp: FastMCP):
         assignment_id: str | int,
         priority_filter: str = "all",
         include_contact_info: bool = False,
-        days_threshold: int = 3
+        days_threshold: int = 3,
     ) -> str:
         """Get prioritized list of students requiring instructor follow-up based on peer review completion status.
 
@@ -175,14 +183,16 @@ def register_peer_review_tools(mcp: FastMCP):
                 return f"Error: priority_filter must be one of {valid_priorities}, got '{priority_filter}'"
 
             course_id = await get_course_id(course_identifier)
+            if course_id is None:
+                return f"Error: Could not resolve course '{course_identifier}'"
             analyzer = PeerReviewAnalyzer()
 
             result = await analyzer.get_followup_list(
-                course_id=course_id,
+                course_id=int(course_id),
                 assignment_id=int(assignment_id),
                 priority_filter=priority_filter,
                 include_contact_info=include_contact_info,
-                days_threshold=days_threshold
+                days_threshold=days_threshold,
             )
 
             if "error" in result:

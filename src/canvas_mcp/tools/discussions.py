@@ -1,8 +1,8 @@
 """Discussion and announcement MCP tools for Canvas API."""
 
-import json
 import re
 from datetime import datetime
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -14,15 +14,16 @@ from ..core.logging import log_error, log_warning
 from ..core.validation import validate_params
 
 
-def register_discussion_tools(mcp: FastMCP):
+def register_discussion_tools(mcp: FastMCP) -> None:
     """Register all discussion and announcement MCP tools."""
 
     # ===== DISCUSSION TOOLS =====
 
     @mcp.tool()
     @validate_params
-    async def list_discussion_topics(course_identifier: str | int,
-                                   include_announcements: bool = False) -> str:
+    async def list_discussion_topics(
+        course_identifier: str | int, include_announcements: bool = False
+    ) -> str:
         """List discussion topics for a specific course.
 
         Args:
@@ -31,12 +32,14 @@ def register_discussion_tools(mcp: FastMCP):
         """
         course_id = await get_course_id(course_identifier)
 
-        params = {"per_page": 100}
+        params: dict[str, object] = {"per_page": 100}
 
         if include_announcements:
             params["include[]"] = ["announcement"]
 
-        topics = await fetch_all_paginated_results(f"/courses/{course_id}/discussion_topics", params)
+        topics = await fetch_all_paginated_results(
+            f"/courses/{course_id}/discussion_topics", params
+        )
 
         if isinstance(topics, dict) and "error" in topics:
             return f"Error fetching discussion topics: {topics['error']}"
@@ -60,12 +63,15 @@ def register_discussion_tools(mcp: FastMCP):
             )
 
         course_display = await get_course_code(course_id) or course_identifier
-        return f"Discussion Topics for Course {course_display}:\n\n" + "\n".join(topics_info)
+        return f"Discussion Topics for Course {course_display}:\n\n" + "\n".join(
+            topics_info
+        )
 
     @mcp.tool()
     @validate_params
-    async def get_discussion_topic_details(course_identifier: str | int,
-                                         topic_id: str | int) -> str:
+    async def get_discussion_topic_details(
+        course_identifier: str | int, topic_id: str | int
+    ) -> str:
         """Get detailed information about a specific discussion topic.
 
         Args:
@@ -133,10 +139,12 @@ def register_discussion_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
-    async def list_discussion_entries(course_identifier: str | int,
-                                    topic_id: str | int,
-                                    include_full_content: bool = False,
-                                    include_replies: bool = False) -> str:
+    async def list_discussion_entries(
+        course_identifier: str | int,
+        topic_id: str | int,
+        include_full_content: bool = False,
+        include_replies: bool = False,
+    ) -> str:
         """List discussion entries (posts) for a specific discussion topic with optional full content and replies.
 
         Args:
@@ -150,7 +158,7 @@ def register_discussion_tools(mcp: FastMCP):
         # Get basic entries first
         entries = await fetch_all_paginated_results(
             f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            {"per_page": 100}
+            {"per_page": 100},
         )
 
         if isinstance(entries, dict) and "error" in entries:
@@ -161,9 +169,15 @@ def register_discussion_tools(mcp: FastMCP):
 
         # Anonymize entries to protect student privacy
         try:
-            anonymized_entries = anonymize_response_data(entries, data_type="discussions")
+            anonymized_entries = anonymize_response_data(
+                entries, data_type="discussions"
+            )
             # Basic validation: check that anonymization occurred
-            if anonymized_entries and isinstance(anonymized_entries, list) and len(anonymized_entries) > 0:
+            if (
+                anonymized_entries
+                and isinstance(anonymized_entries, list)
+                and len(anonymized_entries) > 0
+            ):
                 # Verify first entry was anonymized (has anonymous user_name)
                 first_entry = anonymized_entries[0]
                 if first_entry.get("user_name", "").startswith("Student_"):
@@ -172,7 +186,7 @@ def register_discussion_tools(mcp: FastMCP):
                     log_warning(
                         "Anonymization may not have been applied properly",
                         course_id=course_id,
-                        topic_id=topic_id
+                        topic_id=topic_id,
                     )
             else:
                 entries = anonymized_entries  # Use result even if validation unclear
@@ -182,7 +196,7 @@ def register_discussion_tools(mcp: FastMCP):
                 "Failed to anonymize discussion entries",
                 exc=e,
                 course_id=course_id,
-                topic_id=topic_id
+                topic_id=topic_id,
             )
             # Continue with original data - this maintains functionality while logging the issue
 
@@ -203,7 +217,7 @@ def register_discussion_tools(mcp: FastMCP):
                     "Failed to fetch discussion view, falling back to individual calls",
                     exc=e,
                     course_id=course_id,
-                    topic_id=topic_id
+                    topic_id=topic_id,
                 )
 
             # Method 2: For entries not found in view, try entry_list endpoint
@@ -216,11 +230,14 @@ def register_discussion_tools(mcp: FastMCP):
             if missing_entry_ids:
                 try:
                     entry_list_response = await make_canvas_request(
-                        "get", f"/courses/{course_id}/discussion_topics/{topic_id}/entry_list",
-                        params={"ids[]": missing_entry_ids}
+                        "get",
+                        f"/courses/{course_id}/discussion_topics/{topic_id}/entry_list",
+                        params={"ids[]": missing_entry_ids},
                     )
 
-                    if "error" not in entry_list_response and isinstance(entry_list_response, list):
+                    if "error" not in entry_list_response and isinstance(
+                        entry_list_response, list
+                    ):
                         for full_entry in entry_list_response:
                             full_entries_map[str(full_entry.get("id"))] = full_entry
                 except Exception as e:
@@ -229,7 +246,7 @@ def register_discussion_tools(mcp: FastMCP):
                         exc=e,
                         course_id=course_id,
                         topic_id=topic_id,
-                        missing_count=len(missing_entry_ids)
+                        missing_count=len(missing_entry_ids),
                     )
 
         # Get topic details for context
@@ -263,16 +280,17 @@ def register_discussion_tools(mcp: FastMCP):
 
             # Process message content
             import re
+
             if message:
                 if include_full_content:
                     # For full content, clean HTML but keep the full text
-                    message_display = re.sub(r'<[^>]+>', '', message)
+                    message_display = re.sub(r"<[^>]+>", "", message)
                     message_display = message_display.strip()
                     if not message_display:
                         message_display = "[Content contains only HTML/formatting]"
                 else:
                     # For preview, truncate as before
-                    message_preview = re.sub(r'<[^>]+>', '', message)
+                    message_preview = re.sub(r"<[^>]+>", "", message)
                     if len(message_preview) > 300:
                         message_preview = message_preview[:300] + "..."
                     message_display = message_preview.replace("\n", " ").strip()
@@ -282,7 +300,7 @@ def register_discussion_tools(mcp: FastMCP):
             # Handle replies
             replies_info = ""
             if include_replies:
-                replies = []
+                replies: Any = []
 
                 # Try to get replies from enhanced fetch first
                 if entry_id_str in full_entries_map:
@@ -298,10 +316,13 @@ def register_discussion_tools(mcp: FastMCP):
                     try:
                         replies_response = await fetch_all_paginated_results(
                             f"/courses/{course_id}/discussion_topics/{topic_id}/entries/{entry_id}/replies",
-                            {"per_page": 100}
+                            {"per_page": 100},
                         )
 
-                        if not isinstance(replies_response, dict) or "error" not in replies_response:
+                        if (
+                            not isinstance(replies_response, dict)
+                            or "error" not in replies_response
+                        ):
                             replies = replies_response
                     except Exception as e:
                         log_warning(
@@ -309,7 +330,7 @@ def register_discussion_tools(mcp: FastMCP):
                             exc=e,
                             course_id=course_id,
                             topic_id=topic_id,
-                            entry_id=entry_id
+                            entry_id=entry_id,
                         )
 
                 if replies:
@@ -321,14 +342,16 @@ def register_discussion_tools(mcp: FastMCP):
 
                         # Clean reply message
                         if reply_msg:
-                            reply_clean = re.sub(r'<[^>]+>', '', reply_msg)
+                            reply_clean = re.sub(r"<[^>]+>", "", reply_msg)
                             if len(reply_clean) > 200:
                                 reply_clean = reply_clean[:200] + "..."
                             reply_clean = reply_clean.replace("\n", " ").strip()
                         else:
                             reply_clean = "[No content]"
 
-                        replies_info += f"    {i}. {reply_user} ({reply_created}): {reply_clean}\n"
+                        replies_info += (
+                            f"    {i}. {reply_user} ({reply_created}): {reply_clean}\n"
+                        )
                 else:
                     replies_info = "\n  No replies found.\n"
             else:
@@ -364,14 +387,20 @@ def register_discussion_tools(mcp: FastMCP):
         if not include_replies:
             footer += "\n💡 Tip: Use include_replies=True to fetch all replies"
 
-        return f"Discussion Entries for '{topic_title}' in Course {course_display}:\n\n" + "\n".join(entries_info) + footer
+        return (
+            f"Discussion Entries for '{topic_title}' in Course {course_display}:\n\n"
+            + "\n".join(entries_info)
+            + footer
+        )
 
     @mcp.tool()
     @validate_params
-    async def get_discussion_entry_details(course_identifier: str | int,
-                                         topic_id: str | int,
-                                         entry_id: str | int,
-                                         include_replies: bool = True) -> str:
+    async def get_discussion_entry_details(
+        course_identifier: str | int,
+        topic_id: str | int,
+        entry_id: str | int,
+        include_replies: bool = True,
+    ) -> str:
         """Get detailed information about a specific discussion entry including all its replies.
 
         Args:
@@ -384,7 +413,7 @@ def register_discussion_tools(mcp: FastMCP):
 
         # Method 1: Try to get entry details from the discussion view endpoint
         entry_response = None
-        replies = []
+        replies: Any = []
 
         try:
             # First try the discussion view endpoint which includes all entries
@@ -406,18 +435,21 @@ def register_discussion_tools(mcp: FastMCP):
                 exc=e,
                 course_id=course_id,
                 topic_id=topic_id,
-                entry_id=entry_id
+                entry_id=entry_id,
             )
 
         # Method 2: If view method failed, try the entry_list endpoint
         if not entry_response:
             try:
                 entry_list_response = await make_canvas_request(
-                    "get", f"/courses/{course_id}/discussion_topics/{topic_id}/entry_list",
-                    params={"ids[]": entry_id}
+                    "get",
+                    f"/courses/{course_id}/discussion_topics/{topic_id}/entry_list",
+                    params={"ids[]": entry_id},
                 )
 
-                if "error" not in entry_list_response and isinstance(entry_list_response, list):
+                if "error" not in entry_list_response and isinstance(
+                    entry_list_response, list
+                ):
                     if entry_list_response:
                         entry_response = entry_list_response[0]
             except Exception as e:
@@ -426,7 +458,7 @@ def register_discussion_tools(mcp: FastMCP):
                     exc=e,
                     course_id=course_id,
                     topic_id=topic_id,
-                    entry_id=entry_id
+                    entry_id=entry_id,
                 )
 
         # Method 3: Fallback to getting all entries and finding our target
@@ -434,7 +466,7 @@ def register_discussion_tools(mcp: FastMCP):
             try:
                 all_entries = await fetch_all_paginated_results(
                     f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-                    {"per_page": 100}
+                    {"per_page": 100},
                 )
 
                 if not isinstance(all_entries, dict) or "error" not in all_entries:
@@ -451,7 +483,7 @@ def register_discussion_tools(mcp: FastMCP):
                     exc=e,
                     course_id=course_id,
                     topic_id=topic_id,
-                    entry_id=entry_id
+                    entry_id=entry_id,
                 )
 
         # If we still don't have the entry, return error
@@ -463,10 +495,13 @@ def register_discussion_tools(mcp: FastMCP):
             try:
                 replies_response = await fetch_all_paginated_results(
                     f"/courses/{course_id}/discussion_topics/{topic_id}/entries/{entry_id}/replies",
-                    {"per_page": 100}
+                    {"per_page": 100},
                 )
 
-                if not isinstance(replies_response, dict) or "error" not in replies_response:
+                if (
+                    not isinstance(replies_response, dict)
+                    or "error" not in replies_response
+                ):
                     replies = replies_response
             except Exception as e:
                 log_warning(
@@ -474,7 +509,7 @@ def register_discussion_tools(mcp: FastMCP):
                     exc=e,
                     course_id=course_id,
                     topic_id=topic_id,
-                    entry_id=entry_id
+                    entry_id=entry_id,
                 )
 
         # Get topic details for context
@@ -528,15 +563,17 @@ def register_discussion_tools(mcp: FastMCP):
             else:
                 result += "\nNo replies found for this entry."
         else:
-            result += "\n(Replies not included - set include_replies=True to fetch them)"
+            result += (
+                "\n(Replies not included - set include_replies=True to fetch them)"
+            )
 
         return result
 
     @mcp.tool()
     @validate_params
-    async def get_discussion_with_replies(course_identifier: str | int,
-                                        topic_id: str | int,
-                                        include_replies: bool = False) -> str:
+    async def get_discussion_with_replies(
+        course_identifier: str | int, topic_id: str | int, include_replies: bool = False
+    ) -> str:
         """Enhanced function to get discussion entries with optional reply fetching.
 
         Args:
@@ -549,7 +586,7 @@ def register_discussion_tools(mcp: FastMCP):
         # Get basic entries first
         entries = await fetch_all_paginated_results(
             f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            {"per_page": 100}
+            {"per_page": 100},
         )
 
         if isinstance(entries, dict) and "error" in entries:
@@ -579,8 +616,9 @@ def register_discussion_tools(mcp: FastMCP):
 
             # Clean up message for display
             import re
+
             if message:
-                message_preview = re.sub(r'<[^>]+>', '', message)
+                message_preview = re.sub(r"<[^>]+>", "", message)
                 if len(message_preview) > 200:
                     message_preview = message_preview[:200] + "..."
                 message_preview = message_preview.replace("\n", " ").strip()
@@ -593,7 +631,7 @@ def register_discussion_tools(mcp: FastMCP):
 
             # Handle replies
             if include_replies:
-                replies = []
+                replies: Any = []
 
                 # Method 1: Check recent_replies from the entry
                 recent_replies = entry.get("recent_replies", [])
@@ -606,10 +644,13 @@ def register_discussion_tools(mcp: FastMCP):
                     try:
                         replies_response = await fetch_all_paginated_results(
                             f"/courses/{course_id}/discussion_topics/{topic_id}/entries/{entry_id}/replies",
-                            {"per_page": 100}
+                            {"per_page": 100},
                         )
 
-                        if not isinstance(replies_response, dict) or "error" not in replies_response:
+                        if (
+                            not isinstance(replies_response, dict)
+                            or "error" not in replies_response
+                        ):
                             replies = replies_response
                     except Exception as e:
                         log_warning(
@@ -617,7 +658,7 @@ def register_discussion_tools(mcp: FastMCP):
                             exc=e,
                             course_id=course_id,
                             topic_id=topic_id,
-                            entry_id=entry_id
+                            entry_id=entry_id,
                         )
 
                 # Display replies
@@ -630,7 +671,7 @@ def register_discussion_tools(mcp: FastMCP):
 
                         # Clean reply message
                         if reply_msg:
-                            reply_preview = re.sub(r'<[^>]+>', '', reply_msg)
+                            reply_preview = re.sub(r"<[^>]+>", "", reply_msg)
                             if len(reply_preview) > 150:
                                 reply_preview = reply_preview[:150] + "..."
                             reply_preview = reply_preview.replace("\n", " ").strip()
@@ -657,15 +698,17 @@ def register_discussion_tools(mcp: FastMCP):
             result += "\n"
 
         if not include_replies:
-            result += "\n💡 Tip: Use include_replies=True to fetch detailed reply content"
+            result += (
+                "\n💡 Tip: Use include_replies=True to fetch detailed reply content"
+            )
 
         return result
 
     @mcp.tool()
     @validate_params
-    async def post_discussion_entry(course_identifier: str | int,
-                                  topic_id: str | int,
-                                  message: str) -> str:
+    async def post_discussion_entry(
+        course_identifier: str | int, topic_id: str | int, message: str
+    ) -> str:
         """Post a new top-level entry to a discussion topic.
 
         Args:
@@ -676,14 +719,13 @@ def register_discussion_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Prepare the entry data
-        data = {
-            "message": message
-        }
+        data = {"message": message}
 
         # Post the entry
         response = await make_canvas_request(
-            "post", f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
-            data=data
+            "post",
+            f"/courses/{course_id}/discussion_topics/{topic_id}/entries",
+            data=data,
         )
 
         if "error" in response:
@@ -717,10 +759,12 @@ def register_discussion_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
-    async def reply_to_discussion_entry(course_identifier: str | int,
-                                      topic_id: str | int,
-                                      entry_id: str | int,
-                                      message: str) -> str:
+    async def reply_to_discussion_entry(
+        course_identifier: str | int,
+        topic_id: str | int,
+        entry_id: str | int,
+        message: str,
+    ) -> str:
         """Reply to a student's discussion entry/comment.
 
         Args:
@@ -735,14 +779,12 @@ def register_discussion_tools(mcp: FastMCP):
         topic_id_str = str(topic_id)
         entry_id_str = str(entry_id)
 
-        data = {
-            "message": message
-        }
+        data = {"message": message}
 
         response = await make_canvas_request(
             "post",
             f"/courses/{course_id}/discussion_topics/{topic_id_str}/entries/{entry_id_str}/replies",
-            data=data
+            data=data,
         )
 
         if "error" in response:
@@ -751,21 +793,25 @@ def register_discussion_tools(mcp: FastMCP):
         reply_id = response.get("id")
         course_display = await get_course_code(course_id) or course_identifier
 
-        return f"Reply posted successfully in course {course_display}:\n" + \
-               f"Topic ID: {topic_id}\n" + \
-               f"Original Entry ID: {entry_id}\n" + \
-               f"Reply ID: {reply_id}\n" + \
-               f"Message: {truncate_text(message, 200)}"
+        return (
+            f"Reply posted successfully in course {course_display}:\n"
+            + f"Topic ID: {topic_id}\n"
+            + f"Original Entry ID: {entry_id}\n"
+            + f"Reply ID: {reply_id}\n"
+            + f"Message: {truncate_text(message, 200)}"
+        )
 
     @mcp.tool()
     @validate_params
-    async def create_discussion_topic(course_identifier: str | int,
-                                    title: str,
-                                    message: str,
-                                    delayed_post_at: str | None = None,
-                                    lock_at: str | None = None,
-                                    require_initial_post: bool = False,
-                                    pinned: bool = False) -> str:
+    async def create_discussion_topic(
+        course_identifier: str | int,
+        title: str,
+        message: str,
+        delayed_post_at: str | None = None,
+        lock_at: str | None = None,
+        require_initial_post: bool = False,
+        pinned: bool = False,
+    ) -> str:
         """Create a new discussion topic for a course.
 
         Args:
@@ -784,7 +830,7 @@ def register_discussion_tools(mcp: FastMCP):
             "message": message,
             "published": True,
             "require_initial_post": require_initial_post,
-            "pinned": pinned
+            "pinned": pinned,
         }
 
         if delayed_post_at:
@@ -805,10 +851,12 @@ def register_discussion_tools(mcp: FastMCP):
         created_at = format_date(response.get("created_at"))
 
         course_display = await get_course_code(course_id) or course_identifier
-        return f"Discussion topic created successfully in course {course_display}:\n\n" + \
-               f"ID: {topic_id}\n" + \
-               f"Title: {topic_title}\n" + \
-               f"Created: {created_at}"
+        return (
+            f"Discussion topic created successfully in course {course_display}:\n\n"
+            + f"ID: {topic_id}\n"
+            + f"Title: {topic_title}\n"
+            + f"Created: {created_at}"
+        )
 
     # ===== ANNOUNCEMENT TOOLS =====
 
@@ -824,10 +872,12 @@ def register_discussion_tools(mcp: FastMCP):
         params = {
             "include[]": ["announcement"],
             "only_announcements": True,
-            "per_page": 100
+            "per_page": 100,
         }
 
-        announcements = await fetch_all_paginated_results(f"/courses/{course_id}/discussion_topics", params)
+        announcements = await fetch_all_paginated_results(
+            f"/courses/{course_id}/discussion_topics", params
+        )
 
         if isinstance(announcements, dict) and "error" in announcements:
             return f"Error fetching announcements: {announcements['error']}"
@@ -846,15 +896,19 @@ def register_discussion_tools(mcp: FastMCP):
             )
 
         course_display = await get_course_code(course_id) or course_identifier
-        return f"Announcements for Course {course_display}:\n\n" + "\n".join(announcements_info)
+        return f"Announcements for Course {course_display}:\n\n" + "\n".join(
+            announcements_info
+        )
 
     @mcp.tool()
     @validate_params
-    async def create_announcement(course_identifier: str | int,
-                                title: str,
-                                message: str,
-                                delayed_post_at: str | None = None,
-                                lock_at: str | None = None) -> str:
+    async def create_announcement(
+        course_identifier: str | int,
+        title: str,
+        message: str,
+        delayed_post_at: str | None = None,
+        lock_at: str | None = None,
+    ) -> str:
         """Create a new announcement for a course with optional scheduling.
 
         Args:
@@ -870,7 +924,7 @@ def register_discussion_tools(mcp: FastMCP):
             "title": title,
             "message": message,
             "is_announcement": True,
-            "published": True
+            "published": True,
         }
 
         if delayed_post_at:
@@ -891,10 +945,12 @@ def register_discussion_tools(mcp: FastMCP):
         created_at = format_date(response.get("created_at"))
 
         course_display = await get_course_code(course_id) or course_identifier
-        return f"Announcement created successfully in course {course_display}:\n\n" + \
-               f"ID: {announcement_id}\n" + \
-               f"Title: {announcement_title}\n" + \
-               f"Created: {created_at}"
+        return (
+            f"Announcement created successfully in course {course_display}:\n\n"
+            + f"ID: {announcement_id}\n"
+            + f"Title: {announcement_title}\n"
+            + f"Created: {created_at}"
+        )
 
     # ===== ANNOUNCEMENT DELETION =====
 
@@ -908,7 +964,7 @@ def register_discussion_tools(mcp: FastMCP):
         older_than: str | None = None,
         newer_than: str | None = None,
         limit: int | None = None,
-        dry_run: bool = True
+        dry_run: bool = True,
     ) -> str:
         """Delete announcements by ID(s) or filter criteria. Defaults to dry_run for safety.
 
@@ -930,7 +986,9 @@ def register_discussion_tools(mcp: FastMCP):
 
         # Determine which announcements to target
         targets: list[dict] = []
-        using_filters = any(f is not None for f in [title_contains, title_regex, older_than, newer_than])
+        using_filters = any(
+            f is not None for f in [title_contains, title_regex, older_than, newer_than]
+        )
 
         if announcement_ids is not None and not using_filters:
             # Direct ID mode - normalize to list
@@ -944,20 +1002,28 @@ def register_discussion_tools(mcp: FastMCP):
                     "get", f"/courses/{course_id}/discussion_topics/{aid}"
                 )
                 if "error" in announcement:
-                    targets.append({"id": str(aid), "title": "Unknown", "error": announcement["error"]})
+                    targets.append(
+                        {
+                            "id": str(aid),
+                            "title": "Unknown",
+                            "error": announcement["error"],
+                        }
+                    )
                 else:
-                    targets.append({
-                        "id": str(announcement.get("id", aid)),
-                        "title": announcement.get("title", "Untitled"),
-                        "posted_at": announcement.get("posted_at")
-                    })
+                    targets.append(
+                        {
+                            "id": str(announcement.get("id", aid)),
+                            "title": announcement.get("title", "Untitled"),
+                            "posted_at": announcement.get("posted_at"),
+                        }
+                    )
 
         elif using_filters:
             # Filter mode - fetch all announcements then filter
             params = {
                 "include[]": ["announcement"],
                 "only_announcements": True,
-                "per_page": 100
+                "per_page": 100,
             }
             announcements = await fetch_all_paginated_results(
                 f"/courses/{course_id}/discussion_topics", params
@@ -986,24 +1052,32 @@ def register_discussion_tools(mcp: FastMCP):
 
                 if posted_at_str and match:
                     try:
-                        posted_at = datetime.fromisoformat(posted_at_str.replace('Z', '+00:00'))
+                        posted_at = datetime.fromisoformat(
+                            posted_at_str.replace("Z", "+00:00")
+                        )
                         if older_than:
-                            cutoff = datetime.fromisoformat(older_than.replace('Z', '+00:00'))
+                            cutoff = datetime.fromisoformat(
+                                older_than.replace("Z", "+00:00")
+                            )
                             if posted_at >= cutoff:
                                 match = False
                         if newer_than and match:
-                            cutoff = datetime.fromisoformat(newer_than.replace('Z', '+00:00'))
+                            cutoff = datetime.fromisoformat(
+                                newer_than.replace("Z", "+00:00")
+                            )
                             if posted_at <= cutoff:
                                 match = False
                     except ValueError as e:
                         return f"Error parsing date: {e}"
 
                 if match:
-                    targets.append({
-                        "id": str(announcement.get("id")),
-                        "title": title or "Untitled",
-                        "posted_at": posted_at_str
-                    })
+                    targets.append(
+                        {
+                            "id": str(announcement.get("id")),
+                            "title": title or "Untitled",
+                            "posted_at": posted_at_str,
+                        }
+                    )
 
             if limit and len(targets) > limit:
                 targets = targets[:limit]

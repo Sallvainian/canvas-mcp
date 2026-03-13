@@ -5,7 +5,6 @@ between Canvas courses using the Content Migrations API.
 """
 
 import asyncio
-from typing import Union
 
 from mcp.server.fastmcp import FastMCP
 
@@ -29,13 +28,13 @@ VALID_CONTENT_TYPES = {
 }
 
 
-def register_content_migration_tools(mcp: FastMCP):
+def register_content_migration_tools(mcp: FastMCP) -> None:
     """Register content migration tools."""
 
     @mcp.tool()
     @validate_params
     async def copy_course_content(
-        source_course: Union[str, int],
+        source_course: str | int,
         destination_courses: str,
         content_type: str,
         content_ids: str,
@@ -66,15 +65,19 @@ def register_content_migration_tools(mcp: FastMCP):
         if not ids_list:
             return "No content_ids provided."
 
-        dest_strings = [s.strip() for s in str(destination_courses).split(",") if s.strip()]
+        dest_strings = [
+            s.strip() for s in str(destination_courses).split(",") if s.strip()
+        ]
         if not dest_strings:
             return "No destination_courses provided."
 
         # Resolve all destination course IDs
-        dest_courses = []
+        dest_courses: list[tuple[str, str]] = []
         for d in dest_strings:
             dest_id = await get_course_id(d)
-            dest_display = await get_course_code(dest_id) or d
+            if dest_id is None:
+                return f"Error: Could not resolve destination course '{d}'"
+            dest_display = str(await get_course_code(dest_id) or d)
             dest_courses.append((dest_id, dest_display))
 
         # Build the migration payload
@@ -85,7 +88,7 @@ def register_content_migration_tools(mcp: FastMCP):
         }
 
         # Start migrations concurrently
-        async def start_migration(dest_id, dest_display):
+        async def start_migration(dest_id: str, dest_display: str) -> dict[str, object]:
             response = await make_canvas_request(
                 "post",
                 f"/courses/{dest_id}/content_migrations",
@@ -135,10 +138,10 @@ def register_content_migration_tools(mcp: FastMCP):
                 to_poll.append(r)
 
         # Poll all migrations concurrently
-        async def poll_migration(info):
+        async def poll_migration(info: dict[str, object]) -> dict[str, object]:
             if info.get("progress_id"):
                 result = await poll_canvas_progress(
-                    info["progress_id"], max_wait_seconds=180.0
+                    str(info["progress_id"]), max_wait_seconds=180.0
                 )
                 info["poll_result"] = result
             else:
@@ -187,9 +190,15 @@ def register_content_migration_tools(mcp: FastMCP):
         succeeded = 0
         failed = 0
 
+        from typing import Any, cast
+
         for info in polled:
-            pr = info.get("poll_result", {})
-            status = "completed" if pr.get("completed") else pr.get("workflow_state", "unknown")
+            pr = cast(dict[str, Any], info.get("poll_result", {}))
+            status = (
+                "completed"
+                if pr.get("completed")
+                else pr.get("workflow_state", "unknown")
+            )
             if pr.get("completed"):
                 succeeded += 1
                 result_lines.append(f"  {info['dest_display']}: completed")

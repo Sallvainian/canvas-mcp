@@ -1,31 +1,353 @@
-"""Page settings MCP tools for Canvas API.
+"""Page MCP tools for Canvas API.
 
-Provides tools for updating page settings (publish/unpublish, front page,
-editing roles) separate from content editing.
+Provides tools for listing, viewing, creating, editing pages and managing
+page settings (publish/unpublish, front page, editing roles).
 """
-
-from typing import Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
 from ..core.cache import get_course_code, get_course_id
-from ..core.client import make_canvas_request
-from ..core.dates import format_date
+from ..core.client import fetch_all_paginated_results, make_canvas_request
+from ..core.dates import format_date, format_date_smart
+from ..core.response_formatter import (
+    Verbosity,
+    format_header,
+    format_response,
+    get_verbosity,
+)
 from ..core.validation import validate_params
 
 
-def register_page_tools(mcp: FastMCP):
-    """Register page settings MCP tools."""
+def register_page_tools(mcp: FastMCP) -> None:
+    """Register page MCP tools."""
+
+    @mcp.tool()
+    @validate_params
+    async def list_pages(
+        course_identifier: str | int,
+        sort: str | None = "title",
+        order: str | None = "asc",
+        search_term: str | None = None,
+        published: bool | None = None,
+        verbosity: str | None = None,
+    ) -> str:
+        """List pages for a specific course.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            sort: Sort criteria ('title', 'created_at', 'updated_at')
+            order: Sort order ('asc' or 'desc')
+            search_term: Search for pages containing this term in title or body
+            published: Filter by published status (True, False, or None for all)
+            verbosity: Output format - "compact" (default), "standard", or "verbose"
+        """
+        # Determine verbosity level
+        if verbosity:
+            try:
+                v = Verbosity(verbosity.lower())
+            except ValueError:
+                v = get_verbosity()
+        else:
+            v = get_verbosity()
+
+        course_id = await get_course_id(course_identifier)
+
+        params: dict[str, object] = {"per_page": 100}
+
+        if sort:
+            params["sort"] = sort
+        if order:
+            params["order"] = order
+        if search_term:
+            params["search_term"] = search_term
+        if published is not None:
+            params["published"] = published
+
+        pages = await fetch_all_paginated_results(f"/courses/{course_id}/pages", params)
+
+        if isinstance(pages, dict) and "error" in pages:
+            return f"Error fetching pages: {pages['error']}"
+
+        if not pages:
+            return f"No pages found for course {course_identifier}."
+
+        course_display = await get_course_code(course_id) or course_identifier
+
+        if v == Verbosity.COMPACT:
+            # Token-efficient format: pipe-delimited
+            header = format_header("pages", str(course_display), v)
+            items = []
+            for page in pages:
+                url = page.get("url", "-")
+                title = page.get("title", "Untitled")
+                pub = "Y" if page.get("published", False) else "N"
+                front = "F" if page.get("front_page", False) else ""
+                updated = format_date_smart(page.get("updated_at"), "compact")
+                items.append(f"{url}|{title}|{pub}|{front or '-'}|{updated}")
+
+            body = "\n".join(items)
+            return format_response(header, body, v)
+
+        else:
+            # Standard/verbose format
+            pages_info = []
+            for page in pages:
+                url = page.get("url", "No URL")
+                title = page.get("title", "Untitled page")
+                published_status = (
+                    "Published" if page.get("published", False) else "Unpublished"
+                )
+                is_front_page = page.get("front_page", False)
+                updated_at = format_date(page.get("updated_at"))
+
+                front_page_indicator = " (Front Page)" if is_front_page else ""
+
+                pages_info.append(
+                    f"URL: {url}\nTitle: {title}{front_page_indicator}\nStatus: {published_status}\nUpdated: {updated_at}\n"
+                )
+
+            return f"Pages for Course {course_display}:\n\n" + "\n".join(pages_info)
+
+    @mcp.tool()
+    @validate_params
+    async def get_page_content(
+        course_identifier: str | int, page_url_or_id: str
+    ) -> str:
+        """Get the full content body of a specific page.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            page_url_or_id: The page URL or page ID
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request(
+            "get", f"/courses/{course_id}/pages/{page_url_or_id}"
+        )
+
+        if "error" in response:
+            return f"Error fetching page content: {response['error']}"
+
+        title = response.get("title", "Untitled")
+        body = response.get("body", "")
+        published_val = response.get("published", False)
+
+        if not body:
+            return f"Page '{title}' has no content."
+
+        course_display = await get_course_code(course_id) or course_identifier
+        status = "Published" if published_val else "Unpublished"
+
+        return f"Page Content for '{title}' in Course {course_display} ({status}):\n\n{body}"
+
+    @mcp.tool()
+    @validate_params
+    async def get_page_details(
+        course_identifier: str | int, page_url_or_id: str
+    ) -> str:
+        """Get detailed information about a specific page.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            page_url_or_id: The page URL or page ID
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request(
+            "get", f"/courses/{course_id}/pages/{page_url_or_id}"
+        )
+
+        if "error" in response:
+            return f"Error fetching page details: {response['error']}"
+
+        title = response.get("title", "Untitled")
+        url = response.get("url", "N/A")
+        body = response.get("body", "")
+        created_at = format_date(response.get("created_at"))
+        updated_at = format_date(response.get("updated_at"))
+        published_val = response.get("published", False)
+        front_page = response.get("front_page", False)
+        locked_for_user = response.get("locked_for_user", False)
+        editing_roles = response.get("editing_roles", "")
+
+        # Handle last edited by user info
+        last_edited_by = response.get("last_edited_by", {})
+        editor_name = (
+            last_edited_by.get("display_name", "Unknown")
+            if last_edited_by
+            else "Unknown"
+        )
+
+        # Clean up body text for display
+        if body:
+            import re
+
+            body_clean = re.sub(r"<[^>]+>", "", body)
+            body_clean = body_clean.strip()
+            if len(body_clean) > 500:
+                body_clean = body_clean[:500] + "..."
+        else:
+            body_clean = "No content"
+
+        status_info = []
+        if published_val:
+            status_info.append("Published")
+        else:
+            status_info.append("Unpublished")
+
+        if front_page:
+            status_info.append("Front Page")
+
+        if locked_for_user:
+            status_info.append("Locked")
+
+        course_display = await get_course_code(course_id) or course_identifier
+
+        result = f"Page Details for Course {course_display}:\n\n"
+        result += f"Title: {title}\n"
+        result += f"URL: {url}\n"
+        result += f"Status: {', '.join(status_info)}\n"
+        result += f"Created: {created_at}\n"
+        result += f"Updated: {updated_at}\n"
+        result += f"Last Edited By: {editor_name}\n"
+        result += f"Editing Roles: {editing_roles or 'Not specified'}\n"
+        result += f"\nContent Preview:\n{body_clean}"
+
+        return result
+
+    @mcp.tool()
+    @validate_params
+    async def get_front_page(course_identifier: str | int) -> str:
+        """Get the front page content for a course.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+        """
+        course_id = await get_course_id(course_identifier)
+
+        response = await make_canvas_request("get", f"/courses/{course_id}/front_page")
+
+        if "error" in response:
+            return f"Error fetching front page: {response['error']}"
+
+        title = response.get("title", "Untitled")
+        body = response.get("body", "")
+        updated_at = format_date(response.get("updated_at"))
+
+        if not body:
+            return f"Course front page '{title}' has no content."
+
+        course_display = await get_course_code(course_id) or course_identifier
+        return f"Front Page '{title}' for Course {course_display} (Updated: {updated_at}):\n\n{body}"
+
+    @mcp.tool()
+    @validate_params
+    async def create_page(
+        course_identifier: str | int,
+        title: str,
+        body: str,
+        published: bool = True,
+        front_page: bool = False,
+        editing_roles: str = "teachers",
+    ) -> str:
+        """Create a new page in a Canvas course.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            title: The title of the new page
+            body: The HTML content for the page
+            published: Whether the page should be published (default: True)
+            front_page: Whether this should be the course front page (default: False)
+            editing_roles: Who can edit the page (default: "teachers")
+        """
+        course_id = await get_course_id(course_identifier)
+
+        data = {
+            "wiki_page": {
+                "title": title,
+                "body": body,
+                "published": published,
+                "front_page": front_page,
+                "editing_roles": editing_roles,
+            }
+        }
+
+        response = await make_canvas_request(
+            "post", f"/courses/{course_id}/pages", data=data
+        )
+
+        if "error" in response:
+            return f"Error creating page: {response['error']}"
+
+        page_url = response.get("url", "")
+        page_title = response.get("title", title)
+        created_at = format_date(response.get("created_at"))
+        published_status = (
+            "Published" if response.get("published", False) else "Unpublished"
+        )
+
+        course_display = await get_course_code(course_id) or course_identifier
+
+        result = f"Successfully created page in Course {course_display}:\n\n"
+        result += f"Title: {page_title}\n"
+        result += f"URL: {page_url}\n"
+        result += f"Status: {published_status}\n"
+        result += f"Created: {created_at}\n"
+
+        if front_page:
+            result += "Set as front page: Yes\n"
+
+        return result
+
+    @mcp.tool()
+    @validate_params
+    async def edit_page_content(
+        course_identifier: str | int,
+        page_url_or_id: str,
+        new_content: str,
+        title: str | None = None,
+    ) -> str:
+        """Edit the content of a specific page.
+
+        Args:
+            course_identifier: The Canvas course code (e.g., badm_554_120251_246794) or ID
+            page_url_or_id: The page URL or page ID
+            new_content: The new HTML content for the page
+            title: Optional new title for the page
+        """
+        course_id = await get_course_id(course_identifier)
+
+        # Prepare the data for updating the page
+        update_data: dict[str, dict[str, str]] = {"wiki_page": {"body": new_content}}
+
+        if title:
+            update_data["wiki_page"]["title"] = title
+
+        # Update the page
+        response = await make_canvas_request(
+            "put",
+            f"/courses/{course_id}/pages/{page_url_or_id}",
+            data=update_data,
+        )
+
+        if "error" in response:
+            return f"Error updating page: {response['error']}"
+
+        page_title = response.get("title", "Unknown page")
+        updated_at = format_date(response.get("updated_at"))
+        course_display = await get_course_code(course_id) or course_identifier
+
+        return f"Successfully updated page '{page_title}' in course {course_display}. Last updated: {updated_at}"
 
     @mcp.tool()
     @validate_params
     async def update_page_settings(
-        course_identifier: Union[str, int],
+        course_identifier: str | int,
         page_url_or_id: str,
-        published: Optional[bool] = None,
-        front_page: Optional[bool] = None,
-        editing_roles: Optional[str] = None,
-        notify_of_update: Optional[bool] = None
+        published: bool | None = None,
+        front_page: bool | None = None,
+        editing_roles: str | None = None,
+        notify_of_update: bool | None = None,
     ) -> str:
         """Update settings for an existing page (without changing content).
 
@@ -43,7 +365,7 @@ def register_page_tools(mcp: FastMCP):
         course_id = await get_course_id(course_identifier)
 
         # Build update parameters (only include specified settings)
-        wiki_page_params = {}
+        wiki_page_params: dict[str, object] = {}
 
         if published is not None:
             wiki_page_params["published"] = published
@@ -66,7 +388,7 @@ def register_page_tools(mcp: FastMCP):
         response = await make_canvas_request(
             "put",
             f"/courses/{course_id}/pages/{page_url_or_id}",
-            data=update_data
+            data=update_data,
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -78,11 +400,11 @@ def register_page_tools(mcp: FastMCP):
         is_published = response.get("published", False)
         is_front_page = response.get("front_page", False)
         roles = response.get("editing_roles", "teachers")
-        updated_at = response.get("updated_at")
+        updated_at_val = response.get("updated_at")
 
         course_display = await get_course_code(course_id) or course_identifier
 
-        result = f"✅ Page settings updated successfully!\n\n"
+        result = "Page settings updated successfully!\n\n"
         result += f"**{page_title}**\n"
         result += f"  Course: {course_display}\n"
         result += f"  URL: {page_url}\n"
@@ -90,19 +412,19 @@ def register_page_tools(mcp: FastMCP):
         result += f"  Front Page: {'Yes' if is_front_page else 'No'}\n"
         result += f"  Editing Roles: {roles}\n"
 
-        if updated_at:
-            result += f"  Updated: {format_date(updated_at)}\n"
+        if updated_at_val:
+            result += f"  Updated: {format_date(updated_at_val)}\n"
 
         return result
 
     @mcp.tool()
     @validate_params
     async def bulk_update_pages(
-        course_identifier: Union[str, int],
+        course_identifier: str | int,
         page_urls: str,
-        published: Optional[bool] = None,
-        editing_roles: Optional[str] = None,
-        notify_of_update: Optional[bool] = None
+        published: bool | None = None,
+        editing_roles: str | None = None,
+        notify_of_update: bool | None = None,
     ) -> str:
         """Update settings for multiple pages at once.
 
@@ -124,7 +446,7 @@ def register_page_tools(mcp: FastMCP):
             return "No pages specified. Please provide a comma-separated list of page URLs."
 
         # Build update parameters
-        wiki_page_params = {}
+        wiki_page_params: dict[str, object] = {}
 
         if published is not None:
             wiki_page_params["published"] = published
@@ -143,15 +465,15 @@ def register_page_tools(mcp: FastMCP):
         # Process each page
         success_count = 0
         failed_count = 0
-        failed_pages = []
-        updated_pages = []
+        failed_pages: list[str] = []
+        updated_pages: list[str] = []
 
         for page_url in urls:
             response = await make_canvas_request(
                 "put",
                 f"/courses/{course_id}/pages/{page_url}",
                 data=update_data,
-                use_form_data=True
+                use_form_data=True,
             )
 
             if isinstance(response, dict) and "error" in response:
@@ -159,12 +481,12 @@ def register_page_tools(mcp: FastMCP):
                 failed_pages.append(f"{page_url}: {response['error']}")
             else:
                 success_count += 1
-                updated_pages.append(response.get("title", page_url))
+                updated_pages.append(str(response.get("title", page_url)))
 
         # Format result
         course_display = await get_course_code(course_id) or course_identifier
 
-        result = f"## Bulk Page Update Results\n\n"
+        result = "## Bulk Page Update Results\n\n"
         result += f"**Course:** {course_display}\n"
         result += f"**Total pages:** {len(urls)}\n"
         result += f"**Successful:** {success_count}\n"
@@ -172,8 +494,8 @@ def register_page_tools(mcp: FastMCP):
 
         if updated_pages:
             result += "### Updated Pages\n"
-            for title in updated_pages[:10]:  # Show first 10
-                result += f"- ✅ {title}\n"
+            for title_val in updated_pages[:10]:  # Show first 10
+                result += f"- {title_val}\n"
             if len(updated_pages) > 10:
                 result += f"- ... and {len(updated_pages) - 10} more\n"
             result += "\n"
@@ -181,7 +503,7 @@ def register_page_tools(mcp: FastMCP):
         if failed_pages:
             result += "### Failed Pages\n"
             for error in failed_pages[:5]:  # Show first 5 errors
-                result += f"- ❌ {error}\n"
+                result += f"- {error}\n"
             if len(failed_pages) > 5:
                 result += f"- ... and {len(failed_pages) - 5} more errors\n"
 

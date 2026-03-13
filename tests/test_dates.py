@@ -23,10 +23,13 @@ class TestFormatDateSmartRelative:
     def test_2_hours_ago_returns_2h_ago(self, mock_datetime):
         """2 hours ago should return '2h ago', not 'yesterday'."""
         # Fix datetime.now() to a known time
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # Time 2 hours before "now"
         past_time = "2026-01-21T10:00:00Z"
@@ -37,10 +40,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_30_minutes_ago_returns_30m_ago(self, mock_datetime):
         """30 minutes ago should return '30m ago'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         past_time = "2026-01-21T11:30:00Z"
 
@@ -50,10 +56,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_23_hours_ago_returns_23h_ago(self, mock_datetime):
         """23 hours ago should return '23h ago', not 'yesterday'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # 23 hours before noon = 1pm previous day
         past_time = "2026-01-20T13:00:00Z"
@@ -64,10 +73,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_25_hours_ago_returns_yesterday(self, mock_datetime):
         """25 hours ago (>24h) should return 'yesterday'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # 25 hours before noon = 11am two days ago... wait that's 25 hours
         past_time = "2026-01-20T11:00:00Z"
@@ -78,10 +90,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_in_2_hours_returns_in_2h(self, mock_datetime):
         """2 hours from now should return 'in 2h'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         future_time = "2026-01-21T14:00:00Z"
 
@@ -91,10 +106,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_in_30_minutes_returns_in_30m(self, mock_datetime):
         """30 minutes from now should return 'in 30m'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         future_time = "2026-01-21T12:30:00Z"
 
@@ -104,10 +122,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_now_returns_now(self, mock_datetime):
         """Time within 60 seconds should return 'now'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # 30 seconds ago
         near_time = "2026-01-21T11:59:30Z"
@@ -118,10 +139,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_tomorrow_returns_tomorrow(self, mock_datetime):
         """25 hours from now should return 'tomorrow'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         future_time = "2026-01-22T13:00:00Z"
 
@@ -131,10 +155,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_3_days_ago_returns_3_days_ago(self, mock_datetime):
         """3 days ago should return '3 days ago'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # 72+ hours ago
         past_time = "2026-01-18T10:00:00Z"
@@ -145,10 +172,13 @@ class TestFormatDateSmartRelative:
     @patch("canvas_mcp.core.dates.datetime")
     def test_in_3_days_returns_in_3_days(self, mock_datetime):
         """3 days from now should return 'in 3 days'."""
-        fixed_now = datetime.datetime(2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        fixed_now = datetime.datetime(
+            2026, 1, 21, 12, 0, 0, tzinfo=datetime.timezone.utc
+        )
         mock_datetime.datetime.now.return_value = fixed_now
         mock_datetime.datetime.strptime = datetime.datetime.strptime
         mock_datetime.timezone = datetime.timezone
+        mock_datetime.UTC = datetime.UTC
 
         # 72+ hours from now
         future_time = "2026-01-24T14:00:00Z"

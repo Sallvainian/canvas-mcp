@@ -18,8 +18,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def list_quizzes(
-        course_identifier: str | int,
-        search_term: str | None = None
+        course_identifier: str | int, search_term: str | None = None
     ) -> str:
         """List all quizzes for a course.
 
@@ -67,10 +66,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def get_quiz_details(
-        course_identifier: str | int,
-        quiz_id: str | int
-    ) -> str:
+    async def get_quiz_details(course_identifier: str | int, quiz_id: str | int) -> str:
         """Get detailed information about a specific quiz.
 
         Args:
@@ -104,14 +100,17 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             result += f"Time Limit: {time_limit} minutes\n"
 
         result += f"Allowed Attempts: {response.get('allowed_attempts', 1)}\n"
-        result += f"Shuffle Answers: {'Yes' if response.get('shuffle_answers') else 'No'}\n"
+        result += (
+            f"Shuffle Answers: {'Yes' if response.get('shuffle_answers') else 'No'}\n"
+        )
         result += f"Show Correct Answers: {'Yes' if response.get('show_correct_answers') else 'No'}\n"
         result += f"One Question at a Time: {'Yes' if response.get('one_question_at_a_time') else 'No'}\n"
 
         description = response.get("description", "")
         if description:
             import re
-            desc_clean = re.sub(r'<[^>]+>', '', description).strip()
+
+            desc_clean = re.sub(r"<[^>]+>", "", description).strip()
             if len(desc_clean) > 500:
                 desc_clean = desc_clean[:500] + "..."
             result += f"\nDescription:\n{desc_clean}\n"
@@ -134,7 +133,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         shuffle_answers: bool = False,
         show_correct_answers: bool = True,
         one_question_at_a_time: bool = False,
-        published: bool = False
+        published: bool = False,
     ) -> str:
         """Create a new quiz in a course.
 
@@ -164,7 +163,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
                 "shuffle_answers": shuffle_answers,
                 "show_correct_answers": show_correct_answers,
                 "one_question_at_a_time": one_question_at_a_time,
-                "published": published
+                "published": published,
             }
         }
 
@@ -215,7 +214,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         shuffle_answers: bool | None = None,
         show_correct_answers: bool | None = None,
         one_question_at_a_time: bool | None = None,
-        published: bool | None = None
+        published: bool | None = None,
     ) -> str:
         """Update an existing quiz's settings.
 
@@ -270,8 +269,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             return "No update parameters provided."
 
         response = await make_canvas_request(
-            "put", f"/courses/{course_id}/quizzes/{quiz_id}",
-            data={"quiz": quiz_data}
+            "put", f"/courses/{course_id}/quizzes/{quiz_id}", data={"quiz": quiz_data}
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -282,10 +280,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def delete_quiz(
-        course_identifier: str | int,
-        quiz_id: str | int
-    ) -> str:
+    async def delete_quiz(course_identifier: str | int, quiz_id: str | int) -> str:
         """Delete a quiz from a course.
 
         Args:
@@ -310,14 +305,13 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             return f"Error deleting quiz: {response['error']}"
 
         course_display = await get_course_code(course_id) or course_identifier
-        return f"Quiz '{quiz_title}' (ID: {quiz_id}) deleted from course {course_display}."
+        return (
+            f"Quiz '{quiz_title}' (ID: {quiz_id}) deleted from course {course_display}."
+        )
 
     @mcp.tool()
     @validate_params
-    async def publish_quiz(
-        course_identifier: str | int,
-        quiz_id: str | int
-    ) -> str:
+    async def publish_quiz(course_identifier: str | int, quiz_id: str | int) -> str:
         """Publish a quiz, making it available to students.
 
         Args:
@@ -327,8 +321,9 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "put", f"/courses/{course_id}/quizzes/{quiz_id}",
-            data={"quiz": {"published": True}}
+            "put",
+            f"/courses/{course_id}/quizzes/{quiz_id}",
+            data={"quiz": {"published": True}},
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -339,10 +334,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def unpublish_quiz(
-        course_identifier: str | int,
-        quiz_id: str | int
-    ) -> str:
+    async def unpublish_quiz(course_identifier: str | int, quiz_id: str | int) -> str:
         """Unpublish a quiz, hiding it from students.
 
         Args:
@@ -352,8 +344,9 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "put", f"/courses/{course_id}/quizzes/{quiz_id}",
-            data={"quiz": {"published": False}}
+            "put",
+            f"/courses/{course_id}/quizzes/{quiz_id}",
+            data={"quiz": {"published": False}},
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -367,8 +360,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def list_quiz_questions(
-        course_identifier: str | int,
-        quiz_id: str | int
+        course_identifier: str | int, quiz_id: str | int
     ) -> str:
         """List all questions in a quiz.
 
@@ -379,8 +371,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
 
         questions = await fetch_all_paginated_results(
-            f"/courses/{course_id}/quizzes/{quiz_id}/questions",
-            {"per_page": 100}
+            f"/courses/{course_id}/quizzes/{quiz_id}/questions", {"per_page": 100}
         )
 
         if isinstance(questions, dict) and "error" in questions:
@@ -401,7 +392,8 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
             # Clean HTML from question text
             import re
-            text_clean = re.sub(r'<[^>]+>', '', q_text).strip()
+
+            text_clean = re.sub(r"<[^>]+>", "", q_text).strip()
             if len(text_clean) > 200:
                 text_clean = text_clean[:200] + "..."
 
@@ -410,11 +402,15 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
             # Show answer choices for applicable types
             answers = q.get("answers", [])
-            if answers and q_type in ("multiple_choice_question", "true_false_question", "matching_question"):
+            if answers and q_type in (
+                "multiple_choice_question",
+                "true_false_question",
+                "matching_question",
+            ):
                 for ans in answers:
                     ans_text = ans.get("text", ans.get("html", ""))
                     if ans_text:
-                        ans_clean = re.sub(r'<[^>]+>', '', str(ans_text)).strip()
+                        ans_clean = re.sub(r"<[^>]+>", "", str(ans_text)).strip()
                         result += f"     - {ans_clean}\n"
 
             result += "\n"
@@ -430,7 +426,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         question_text: str,
         points_possible: float = 1.0,
         answers: str | None = None,
-        position: int | None = None
+        position: int | None = None,
     ) -> str:
         """Add a question to a quiz.
 
@@ -452,12 +448,14 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         question_data: dict = {
             "question_type": question_type,
             "question_text": question_text,
-            "points_possible": points_possible
+            "points_possible": points_possible,
         }
 
         if answers:
             try:
-                parsed_answers = json.loads(answers) if isinstance(answers, str) else answers
+                parsed_answers = (
+                    json.loads(answers) if isinstance(answers, str) else answers
+                )
                 question_data["answers"] = parsed_answers
             except json.JSONDecodeError:
                 return "Error: 'answers' must be a valid JSON array."
@@ -466,8 +464,9 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             question_data["position"] = position
 
         response = await make_canvas_request(
-            "post", f"/courses/{course_id}/quizzes/{quiz_id}/questions",
-            data={"question": question_data}
+            "post",
+            f"/courses/{course_id}/quizzes/{quiz_id}/questions",
+            data={"question": question_data},
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -475,10 +474,12 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
         course_display = await get_course_code(course_id) or course_identifier
         new_id = response.get("id")
-        return f"Question added to quiz {quiz_id} in course {course_display}:\n\n" \
-               f"Question ID: {new_id}\n" \
-               f"Type: {question_type}\n" \
-               f"Points: {points_possible}"
+        return (
+            f"Question added to quiz {quiz_id} in course {course_display}:\n\n"
+            f"Question ID: {new_id}\n"
+            f"Type: {question_type}\n"
+            f"Points: {points_possible}"
+        )
 
     @mcp.tool()
     @validate_params
@@ -490,7 +491,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         question_type: str | None = None,
         points_possible: float | None = None,
         answers: str | None = None,
-        position: int | None = None
+        position: int | None = None,
     ) -> str:
         """Update an existing quiz question.
 
@@ -518,7 +519,9 @@ def register_quiz_tools(mcp: FastMCP) -> None:
 
         if answers is not None:
             try:
-                parsed_answers = json.loads(answers) if isinstance(answers, str) else answers
+                parsed_answers = (
+                    json.loads(answers) if isinstance(answers, str) else answers
+                )
                 question_data["answers"] = parsed_answers
             except json.JSONDecodeError:
                 return "Error: 'answers' must be a valid JSON array."
@@ -527,8 +530,9 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             return "No update parameters provided."
 
         response = await make_canvas_request(
-            "put", f"/courses/{course_id}/quizzes/{quiz_id}/questions/{question_id}",
-            data={"question": question_data}
+            "put",
+            f"/courses/{course_id}/quizzes/{quiz_id}/questions/{question_id}",
+            data={"question": question_data},
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -540,9 +544,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def delete_quiz_question(
-        course_identifier: str | int,
-        quiz_id: str | int,
-        question_id: str | int
+        course_identifier: str | int, quiz_id: str | int, question_id: str | int
     ) -> str:
         """Delete a question from a quiz.
 
@@ -568,8 +570,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def get_quiz_statistics(
-        course_identifier: str | int,
-        quiz_id: str | int
+        course_identifier: str | int, quiz_id: str | int
     ) -> str:
         """Get statistics and analytics for a quiz including average score and question analysis.
 
@@ -610,7 +611,8 @@ def register_quiz_tools(mcp: FastMCP) -> None:
             for qs in question_stats:
                 q_text = qs.get("question_text", "")
                 import re
-                text_clean = re.sub(r'<[^>]+>', '', q_text).strip()
+
+                text_clean = re.sub(r"<[^>]+>", "", q_text).strip()
                 if len(text_clean) > 100:
                     text_clean = text_clean[:100] + "..."
 
@@ -624,8 +626,7 @@ def register_quiz_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def list_quiz_submissions(
-        course_identifier: str | int,
-        quiz_id: str | int
+        course_identifier: str | int, quiz_id: str | int
     ) -> str:
         """List all submissions for a quiz.
 
@@ -636,14 +637,17 @@ def register_quiz_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
 
         response = await make_canvas_request(
-            "get", f"/courses/{course_id}/quizzes/{quiz_id}/submissions",
-            params={"per_page": 100}
+            "get",
+            f"/courses/{course_id}/quizzes/{quiz_id}/submissions",
+            params={"per_page": 100},
         )
 
         if isinstance(response, dict) and "error" in response:
             return f"Error fetching quiz submissions: {response['error']}"
 
-        submissions = response.get("quiz_submissions", []) if isinstance(response, dict) else []
+        submissions = (
+            response.get("quiz_submissions", []) if isinstance(response, dict) else []
+        )
 
         if not submissions:
             return f"No submissions found for quiz {quiz_id}."

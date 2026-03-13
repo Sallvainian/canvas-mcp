@@ -1,9 +1,10 @@
 """Configuration management for Canvas MCP server."""
 
 import os
-import sys
 
 from dotenv import load_dotenv
+
+from .logging import log_error, log_warning
 
 # Load environment variables from .env file
 load_dotenv()
@@ -35,7 +36,9 @@ class Config:
     def __init__(self) -> None:
         # Required configuration
         self.canvas_api_token = os.getenv("CANVAS_API_TOKEN", "")
-        self.canvas_api_url = os.getenv("CANVAS_API_URL", "https://canvas.illinois.edu/api/v1")
+        self.canvas_api_url = os.getenv(
+            "CANVAS_API_URL", "https://canvas.illinois.edu/api/v1"
+        )
 
         # Optional configuration with defaults
         self.mcp_server_name = os.getenv("MCP_SERVER_NAME", "canvas-api")
@@ -55,12 +58,16 @@ class Config:
         # Code execution sandbox configuration (best-effort by default)
         self.enable_ts_sandbox = _bool_env("ENABLE_TS_SANDBOX", False)
         self.ts_sandbox_mode = os.getenv("TS_SANDBOX_MODE", "auto").lower()
-        self.ts_sandbox_block_outbound_network = _bool_env("TS_SANDBOX_BLOCK_OUTBOUND_NETWORK", False)
+        self.ts_sandbox_block_outbound_network = _bool_env(
+            "TS_SANDBOX_BLOCK_OUTBOUND_NETWORK", False
+        )
         self.ts_sandbox_allowlist_hosts = os.getenv("TS_SANDBOX_ALLOWLIST_HOSTS", "")
         self.ts_sandbox_cpu_limit = _int_env("TS_SANDBOX_CPU_LIMIT", 0)
         self.ts_sandbox_memory_limit_mb = _int_env("TS_SANDBOX_MEMORY_LIMIT_MB", 0)
         self.ts_sandbox_timeout_sec = _int_env("TS_SANDBOX_TIMEOUT_SEC", 0)
-        self.ts_sandbox_container_image = os.getenv("TS_SANDBOX_CONTAINER_IMAGE", "node:20-alpine")
+        self.ts_sandbox_container_image = os.getenv(
+            "TS_SANDBOX_CONTAINER_IMAGE", "node:20-alpine"
+        )
 
         # Optional metadata
         self.institution_name = os.getenv("INSTITUTION_NAME", "")
@@ -120,47 +127,41 @@ def validate_config() -> bool:
     }
 
     if not config.canvas_api_token:
-        print("Error: CANVAS_API_TOKEN environment variable is required", file=sys.stderr)
-        print("Please set it to your Canvas API token in your .env file", file=sys.stderr)
+        log_error("CANVAS_API_TOKEN environment variable is required")
+        log_error("Please set it to your Canvas API token in your .env file")
         return False
 
     if not config.canvas_api_url:
-        print("Error: CANVAS_API_URL environment variable is required", file=sys.stderr)
-        print("Please set it to your Canvas API URL in your .env file", file=sys.stderr)
+        log_error("CANVAS_API_URL environment variable is required")
+        log_error("Please set it to your Canvas API URL in your .env file")
         return False
 
     if not config.canvas_api_url.endswith("/api/v1"):
-        print("Warning: CANVAS_API_URL should end with '/api/v1'", file=sys.stderr)
-        print(f"Current URL: {config.canvas_api_url}", file=sys.stderr)
+        log_warning("CANVAS_API_URL should end with '/api/v1'")
+        log_warning(f"Current URL: {config.canvas_api_url}")
 
     if config.ts_sandbox_mode not in {"auto", "local", "container"}:
-        print(
-            "Warning: TS_SANDBOX_MODE should be one of auto, local, container; "
-            f"defaulting to 'auto' (got '{config.ts_sandbox_mode}')",
-            file=sys.stderr
+        log_warning(
+            "TS_SANDBOX_MODE should be one of auto, local, container; "
+            f"defaulting to 'auto' (got '{config.ts_sandbox_mode}')"
         )
 
     if config.user_type not in {"all", "educator", "student"}:
-        print(
-            f"Warning: CANVAS_MCP_USER_TYPE should be one of all, educator, student; "
-            f"defaulting to 'all' (got '{config.user_type}')",
-            file=sys.stderr
+        log_warning(
+            f"CANVAS_MCP_USER_TYPE should be one of all, educator, student; "
+            f"defaulting to 'all' (got '{config.user_type}')"
         )
         config.user_type = "all"  # Actually apply the default
 
     for env_name, env_value in _INVALID_INT_ENV_VARS.items():
-        print(
-            f"Warning: {env_name} expects an integer; using default value "
-            f"(got '{env_value}')",
-            file=sys.stderr
+        log_warning(
+            f"{env_name} expects an integer; using default value "
+            f"(got '{env_value}')"
         )
 
     for env_name, note in unimplemented_env_vars.items():
         if os.getenv(env_name):
-            print(
-                f"Warning: {env_name} is set but {note}.",
-                file=sys.stderr
-            )
+            log_warning(f"{env_name} is set but {note}.")
 
     return True
 

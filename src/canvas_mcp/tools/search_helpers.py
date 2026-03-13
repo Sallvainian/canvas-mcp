@@ -13,10 +13,7 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def find_assignment(
-        course_identifier: str | int,
-        name_query: str
-    ) -> str:
+    async def find_assignment(course_identifier: str | int, name_query: str) -> str:
         """Find assignments by name (case-insensitive search).
 
         Searches assignment titles for the given query string.
@@ -31,7 +28,7 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
 
         assignments = await fetch_all_paginated_results(
             f"/courses/{course_id}/assignments",
-            {"per_page": 100, "search_term": name_query}
+            {"per_page": 100, "search_term": name_query},
         )
 
         if isinstance(assignments, dict) and "error" in assignments:
@@ -48,11 +45,14 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
         if not matches:
             # Fallback: fetch all and search client-side
             all_assignments = await fetch_all_paginated_results(
-                f"/courses/{course_id}/assignments",
-                {"per_page": 100}
+                f"/courses/{course_id}/assignments", {"per_page": 100}
             )
             if isinstance(all_assignments, list):
-                matches = [a for a in all_assignments if query_lower in a.get("name", "").lower()]
+                matches = [
+                    a
+                    for a in all_assignments
+                    if query_lower in a.get("name", "").lower()
+                ]
 
         if not matches:
             return f"No assignments matching '{name_query}' found."
@@ -70,10 +70,7 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def find_student(
-        course_identifier: str | int,
-        name_query: str
-    ) -> str:
+    async def find_student(course_identifier: str | int, name_query: str) -> str:
         """Find students by name (case-insensitive search).
 
         Searches enrolled student names for the given query string.
@@ -91,8 +88,8 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
             {
                 "enrollment_type[]": "student",
                 "search_term": name_query,
-                "per_page": 100
-            }
+                "per_page": 100,
+            },
         )
 
         if isinstance(users, dict) and "error" in users:
@@ -107,10 +104,12 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
             # Fallback: fetch all students and filter
             all_users = await fetch_all_paginated_results(
                 f"/courses/{course_id}/users",
-                {"enrollment_type[]": "student", "per_page": 100}
+                {"enrollment_type[]": "student", "per_page": 100},
             )
             if isinstance(all_users, list):
-                matches = [u for u in all_users if query_lower in u.get("name", "").lower()]
+                matches = [
+                    u for u in all_users if query_lower in u.get("name", "").lower()
+                ]
 
         if not matches:
             return f"No students matching '{name_query}' found."
@@ -126,10 +125,7 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def find_discussion(
-        course_identifier: str | int,
-        name_query: str
-    ) -> str:
+    async def find_discussion(course_identifier: str | int, name_query: str) -> str:
         """Find discussion topics by title (case-insensitive search).
 
         Searches discussion topic titles for the given query string.
@@ -143,8 +139,7 @@ def register_search_helper_tools(mcp: FastMCP) -> None:
         query_lower = name_query.lower()
 
         topics = await fetch_all_paginated_results(
-            f"/courses/{course_id}/discussion_topics",
-            {"per_page": 100}
+            f"/courses/{course_id}/discussion_topics", {"per_page": 100}
         )
 
         if isinstance(topics, dict) and "error" in topics:

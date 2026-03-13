@@ -13,34 +13,22 @@ def sample_student_summaries():
             "name": "Alice Johnson",
             "page_views": 150,
             "participations": 25,
-            "tardiness_breakdown": {
-                "late": 1,
-                "missing": 0,
-                "on_time": 10
-            }
+            "tardiness_breakdown": {"late": 1, "missing": 0, "on_time": 10},
         },
         {
             "id": 1002,
             "name": "Bob Smith",
             "page_views": 5,
             "participations": 2,
-            "tardiness_breakdown": {
-                "late": 4,
-                "missing": 3,
-                "on_time": 3
-            }
+            "tardiness_breakdown": {"late": 4, "missing": 3, "on_time": 3},
         },
         {
             "id": 1003,
             "name": "Carol Davis",
             "page_views": 0,
             "participations": 0,
-            "tardiness_breakdown": {
-                "late": 0,
-                "missing": 5,
-                "on_time": 0
-            }
-        }
+            "tardiness_breakdown": {"late": 0, "missing": 5, "on_time": 0},
+        },
     ]
 
 
@@ -51,18 +39,18 @@ def sample_student_activity():
         "page_views": {
             "2024-01-15T00:00:00Z": 10,
             "2024-01-16T00:00:00Z": 15,
-            "2024-01-17T00:00:00Z": 8
+            "2024-01-17T00:00:00Z": 8,
         },
         "participations": [
             {
                 "created_at": "2024-01-17T14:30:00Z",
-                "url": "/courses/12345/discussion_topics/100"
+                "url": "/courses/12345/discussion_topics/100",
             },
             {
                 "created_at": "2024-01-16T10:00:00Z",
-                "url": "/courses/12345/assignments/200/submissions"
-            }
-        ]
+                "url": "/courses/12345/assignments/200/submissions",
+            },
+        ],
     }
 
 
@@ -76,8 +64,8 @@ def sample_student_assignments():
             "submission": {
                 "score": 85,
                 "submitted_at": "2024-01-15T18:00:00Z",
-                "late": False
-            }
+                "late": False,
+            },
         },
         {
             "title": "Homework 2",
@@ -85,50 +73,26 @@ def sample_student_assignments():
             "submission": {
                 "score": 70,
                 "submitted_at": "2024-01-20T23:59:00Z",
-                "late": True
-            }
+                "late": True,
+            },
         },
-        {
-            "title": "Homework 3",
-            "points_possible": 100,
-            "submission": None
-        }
+        {"title": "Homework 3", "points_possible": 100, "submission": None},
     ]
 
 
 @pytest.fixture
 def sample_student_communication():
     """Sample student communication data."""
-    return {
-        "level": {
-            "instructorMessages": 5,
-            "studentMessages": 8
-        }
-    }
+    return {"level": {"instructorMessages": 5, "studentMessages": 8}}
 
 
 @pytest.fixture
 def sample_course_activity():
     """Sample course activity data."""
     return [
-        {
-            "date": "2024-01-15",
-            "views": 120,
-            "participations": 45,
-            "submissions": 30
-        },
-        {
-            "date": "2024-01-16",
-            "views": 85,
-            "participations": 20,
-            "submissions": 15
-        },
-        {
-            "date": "2024-01-17",
-            "views": 200,
-            "participations": 80,
-            "submissions": 50
-        }
+        {"date": "2024-01-15", "views": 120, "participations": 45, "submissions": 30},
+        {"date": "2024-01-16", "views": 85, "participations": 20, "submissions": 15},
+        {"date": "2024-01-17", "views": 200, "participations": 80, "submissions": 50},
     ]
 
 
@@ -149,8 +113,8 @@ def sample_assignment_statistics():
                 "on_time": 28,
                 "late": 2,
                 "missing": 5,
-                "floating": 0
-            }
+                "floating": 0,
+            },
         },
         {
             "title": "Quiz 1",
@@ -165,9 +129,9 @@ def sample_assignment_statistics():
                 "on_time": 30,
                 "late": 0,
                 "missing": 2,
-                "floating": 0
-            }
-        }
+                "floating": 0,
+            },
+        },
     ]
 
 
@@ -178,7 +142,7 @@ def sample_report_response():
         "id": 12345,
         "status": "running",
         "progress": 25,
-        "created_at": "2024-01-20T10:00:00Z"
+        "created_at": "2024-01-20T10:00:00Z",
     }
 
 
@@ -193,8 +157,8 @@ def sample_report_complete():
         "attachment": {
             "url": "https://canvas.example.com/files/grades.csv",
             "filename": "grades.csv",
-            "size": 102400
-        }
+            "size": 102400,
+        },
     }
 
 
@@ -204,9 +168,18 @@ class TestGetCourseStudentSummaries:
     @pytest.mark.asyncio
     async def test_returns_student_summaries(self, sample_student_summaries):
         """Test successful retrieval of student summaries."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.fetch_all_paginated_results', new_callable=AsyncMock) as mock_fetch, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.fetch_all_paginated_results",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_fetch.return_value = sample_student_summaries
@@ -232,7 +205,9 @@ class TestGetCourseStudentSummaries:
     @pytest.mark.asyncio
     async def test_invalid_sort_option(self):
         """Test error handling for invalid sort option."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id:
+        with patch(
+            "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+        ) as mock_get_id:
             mock_get_id.return_value = "12345"
 
             from canvas_mcp.tools.analytics import register_analytics_tools
@@ -253,9 +228,17 @@ class TestGetStudentActivity:
     @pytest.mark.asyncio
     async def test_returns_student_activity(self, sample_student_activity):
         """Test successful retrieval of student activity."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_student_activity
@@ -280,9 +263,17 @@ class TestGetStudentAssignmentData:
     @pytest.mark.asyncio
     async def test_returns_assignment_data(self, sample_student_assignments):
         """Test successful retrieval of student assignment data."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_student_assignments
@@ -309,9 +300,17 @@ class TestGetStudentCommunication:
     @pytest.mark.asyncio
     async def test_returns_communication_data(self, sample_student_communication):
         """Test successful retrieval of communication data."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_student_communication
@@ -336,9 +335,17 @@ class TestGetCourseActivity:
     @pytest.mark.asyncio
     async def test_returns_course_activity(self, sample_course_activity):
         """Test successful retrieval of course activity."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_course_activity
@@ -363,9 +370,17 @@ class TestGetAssignmentStatistics:
     @pytest.mark.asyncio
     async def test_returns_assignment_statistics(self, sample_assignment_statistics):
         """Test successful retrieval of assignment statistics."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_assignment_statistics
@@ -392,9 +407,17 @@ class TestStartCourseReport:
     @pytest.mark.asyncio
     async def test_starts_report(self, sample_report_response):
         """Test successful report start."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_report_response
@@ -416,7 +439,9 @@ class TestStartCourseReport:
     @pytest.mark.asyncio
     async def test_invalid_report_type(self):
         """Test error handling for invalid report type."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id:
+        with patch(
+            "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+        ) as mock_get_id:
             mock_get_id.return_value = "12345"
 
             from canvas_mcp.tools.analytics import register_analytics_tools
@@ -437,9 +462,17 @@ class TestGetReportStatus:
     @pytest.mark.asyncio
     async def test_returns_complete_status(self, sample_report_complete):
         """Test successful retrieval of complete report status."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_report_complete
@@ -461,9 +494,17 @@ class TestGetReportStatus:
     @pytest.mark.asyncio
     async def test_returns_running_status(self, sample_report_response):
         """Test status check for running report."""
-        with patch('canvas_mcp.tools.analytics.get_course_id', new_callable=AsyncMock) as mock_get_id, \
-             patch('canvas_mcp.tools.analytics.make_canvas_request', new_callable=AsyncMock) as mock_request, \
-             patch('canvas_mcp.tools.analytics.get_course_code', new_callable=AsyncMock) as mock_get_code:
+        with (
+            patch(
+                "canvas_mcp.tools.analytics.get_course_id", new_callable=AsyncMock
+            ) as mock_get_id,
+            patch(
+                "canvas_mcp.tools.analytics.make_canvas_request", new_callable=AsyncMock
+            ) as mock_request,
+            patch(
+                "canvas_mcp.tools.analytics.get_course_code", new_callable=AsyncMock
+            ) as mock_get_code,
+        ):
 
             mock_get_id.return_value = "12345"
             mock_request.return_value = sample_report_response

@@ -7,7 +7,6 @@ the compact format achieves expected token savings.
 import datetime
 
 
-
 def estimate_tokens(text: str) -> int:
     """Estimate token count using simple heuristic.
 
@@ -44,7 +43,7 @@ class TestTokenEstimation:
         """Test formatted tool output estimation."""
         # Use current year to match format_date_smart behavior
         current_year = datetime.datetime.now(datetime.timezone.utc).year
-        
+
         # Typical verbose assignment output
         verbose = f"""ID: 123456
 Name: Quiz 1 - Introduction to Biology
@@ -70,7 +69,7 @@ class TestResponseFormats:
         """Verify compact assignment list saves >40% tokens."""
         # Use current year to match format_date_smart behavior
         current_year = datetime.datetime.now(datetime.timezone.utc).year
-        
+
         # Simulate 10 assignments in verbose format
         verbose_items = []
         compact_items = []
@@ -86,7 +85,9 @@ class TestResponseFormats:
                 f"{1000 + i}|Assignment {i + 1} - Sample Assignment Title|Jan {21 + (i % 10)}|{100 + i * 10}"
             )
 
-        verbose_output = "Assignments for Course TEST_123:\n\n" + "\n".join(verbose_items)
+        verbose_output = "Assignments for Course TEST_123:\n\n" + "\n".join(
+            verbose_items
+        )
         compact_output = "asgn|TEST_123\n" + "\n".join(compact_items)
 
         verbose_tokens = estimate_tokens(verbose_output)
@@ -104,13 +105,15 @@ class TestResponseFormats:
         """Verify compact submission list saves >60% tokens."""
         # Use current year to match format_date_smart behavior
         current_year = datetime.datetime.now(datetime.timezone.utc).year
-        
+
         # Simulate 25 submissions
         verbose_items = []
         compact_items = []
 
         for i in range(25):
-            submitted = f"{current_year}-01-20T14:30:00Z" if i % 3 != 0 else "Not submitted"
+            submitted = (
+                f"{current_year}-01-20T14:30:00Z" if i % 3 != 0 else "Not submitted"
+            )
             score = str(85 + (i % 15)) if i % 3 != 0 else "Not graded"
             grade = score if score != "Not graded" else "Not graded"
 
@@ -125,7 +128,10 @@ class TestResponseFormats:
             score_short = score if score != "Not graded" else "-"
             compact_items.append(f"{9000 + i}|{sub_short}|{score_short}")
 
-        verbose_output = "Submissions for Assignment 12345 in course TEST_123:\n\n" + "\n".join(verbose_items)
+        verbose_output = (
+            "Submissions for Assignment 12345 in course TEST_123:\n\n"
+            + "\n".join(verbose_items)
+        )
         compact_output = "sub|12345|TEST_123\n" + "\n".join(compact_items)
 
         verbose_tokens = estimate_tokens(verbose_output)
@@ -142,7 +148,7 @@ class TestResponseFormats:
         """Verify analytics summary mode saves >85% tokens."""
         # Use current year to match format_date_smart behavior
         current_year = datetime.datetime.now(datetime.timezone.utc).year
-        
+
         # Full analytics output (simplified)
         verbose_output = f"""Assignment Analytics for 'Quiz 1' in Course TEST_123
 
@@ -198,7 +204,7 @@ class TestDateFormatSavings:
         """Verify compact date format saves tokens."""
         # Use current year to match format_date_smart behavior
         current_year = datetime.datetime.now(datetime.timezone.utc).year
-        
+
         iso_date = f"{current_year}-01-21T23:59:00Z"
         compact_date = "Jan 21"
 
@@ -213,7 +219,9 @@ class TestDateFormatSavings:
     def test_relative_date_format(self) -> None:
         """Verify relative date format is compact."""
         # Use a date 3 days from now to test relative format
-        future_date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3)
+        future_date = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            days=3
+        )
         iso_date = future_date.strftime("%Y-%m-%dT23:59:00Z")
         relative_date = "in 3 days"
 

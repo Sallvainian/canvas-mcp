@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 @pytest.fixture
 def mock_canvas_request():
     """Mock Canvas API request function."""
-    with patch('canvas_mcp.core.client.make_canvas_request') as mock:
+    with patch("canvas_mcp.core.client.make_canvas_request") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
@@ -15,7 +15,7 @@ def mock_canvas_request():
 @pytest.fixture
 def mock_fetch_paginated():
     """Mock paginated fetch function."""
-    with patch('canvas_mcp.core.client.fetch_all_paginated_results') as mock:
+    with patch("canvas_mcp.core.client.fetch_all_paginated_results") as mock:
         mock.return_value = AsyncMock()
         yield mock
 
@@ -23,10 +23,11 @@ def mock_fetch_paginated():
 @pytest.fixture
 def mock_course_id_resolver():
     """Mock course ID resolver."""
-    with patch('canvas_mcp.core.cache.get_course_id') as mock:
+    with patch("canvas_mcp.core.cache.get_course_id") as mock:
         # Default to returning the input as-is (assuming it's already an ID)
         async def resolve_id(identifier):
             return str(identifier) if isinstance(identifier, int) else identifier
+
         mock.side_effect = resolve_id
         yield mock
 
@@ -34,9 +35,11 @@ def mock_course_id_resolver():
 @pytest.fixture
 def mock_course_code_resolver():
     """Mock course code resolver."""
-    with patch('canvas_mcp.core.cache.get_course_code') as mock:
+    with patch("canvas_mcp.core.cache.get_course_code") as mock:
+
         async def resolve_code(course_id):
             return f"course_{course_id}"
+
         mock.side_effect = resolve_code
         yield mock
 
@@ -53,7 +56,7 @@ def sample_course_data():
         "time_zone": "America/Chicago",
         "default_view": "modules",
         "is_public": False,
-        "blueprint": False
+        "blueprint": False,
     }
 
 
@@ -68,7 +71,7 @@ def sample_assignment_data():
         "points_possible": 100,
         "submission_types": ["online_upload", "online_text_entry"],
         "published": True,
-        "locked_for_user": False
+        "locked_for_user": False,
     }
 
 
@@ -84,7 +87,7 @@ def sample_submission_data():
         "workflow_state": "graded",
         "late": False,
         "missing": False,
-        "excused": False
+        "excused": False,
     }
 
 
@@ -98,7 +101,7 @@ def sample_page_data():
         "body": "<h1>Welcome to Module 1</h1><p>Content here</p>",
         "published": True,
         "front_page": False,
-        "updated_at": "2024-01-20T10:00:00Z"
+        "updated_at": "2024-01-20T10:00:00Z",
     }
 
 
@@ -120,8 +123,8 @@ def sample_rubric_data():
                     {"id": "r1", "description": "Excellent", "points": 40},
                     {"id": "r2", "description": "Good", "points": 30},
                     {"id": "r3", "description": "Fair", "points": 20},
-                    {"id": "r4", "description": "Poor", "points": 0}
-                ]
+                    {"id": "r4", "description": "Poor", "points": 0},
+                ],
             },
             {
                 "id": "crit2",
@@ -131,10 +134,10 @@ def sample_rubric_data():
                     {"id": "r5", "description": "Excellent", "points": 30},
                     {"id": "r6", "description": "Good", "points": 20},
                     {"id": "r7", "description": "Fair", "points": 10},
-                    {"id": "r8", "description": "Poor", "points": 0}
-                ]
-            }
-        ]
+                    {"id": "r8", "description": "Poor", "points": 0},
+                ],
+            },
+        ],
     }
 
 
@@ -148,7 +151,7 @@ def sample_discussion_topic_data():
         "posted_at": "2024-01-15T09:00:00Z",
         "published": True,
         "discussion_type": "threaded",
-        "user_can_see_posts": True
+        "user_can_see_posts": True,
     }
 
 
@@ -160,5 +163,5 @@ def sample_announcement_data():
         "title": "Important: Exam Schedule",
         "message": "<p>The midterm exam will be on March 1st</p>",
         "posted_at": "2024-02-01T12:00:00Z",
-        "author": {"id": 2000, "display_name": "Prof. Smith"}
+        "author": {"id": 2000, "display_name": "Prof. Smith"},
     }

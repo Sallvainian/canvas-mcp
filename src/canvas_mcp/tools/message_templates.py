@@ -22,9 +22,8 @@ Please log into Canvas and complete your peer reviews as soon as possible:
 If you have any questions or technical issues, please reach out immediately.
 
 Best regards,
-{instructor_name}"""
+{instructor_name}""",
         },
-
         "partial_completion": {
             "subject": "Reminder: Complete Remaining Peer Review for {assignment_name}",
             "body": """Hi {student_name},
@@ -37,9 +36,8 @@ You still have {remaining_count} peer review remaining to complete:
 Please complete this by the deadline to receive full participation credit.
 
 Thanks,
-{instructor_name}"""
+{instructor_name}""",
         },
-
         "general_reminder": {
             "subject": "Peer Review Reminder: {assignment_name}",
             "body": """Hi {student_name},
@@ -52,8 +50,8 @@ Please complete your assigned peer reviews by the deadline:
 If you have any questions, please don't hesitate to ask.
 
 Best regards,
-{instructor_name}"""
-        }
+{instructor_name}""",
+        },
     }
 
     # Assignment reminder templates
@@ -71,9 +69,8 @@ You can access the assignment here: {assignment_url}
 Please submit your work before the deadline. If you have any questions or need assistance, please reach out.
 
 Best regards,
-{instructor_name}"""
+{instructor_name}""",
         },
-
         "late_submission": {
             "subject": "Late Submission Notice: {assignment_name}",
             "body": """Hi {student_name},
@@ -86,8 +83,8 @@ Please submit your work as soon as possible to minimize late penalties:
 If you are experiencing technical difficulties or have extenuating circumstances, please contact me immediately.
 
 Best regards,
-{instructor_name}"""
-        }
+{instructor_name}""",
+        },
     }
 
     # Discussion participation templates
@@ -106,7 +103,7 @@ The discussion closes {deadline}.
 Looking forward to your contributions!
 
 Best regards,
-{instructor_name}"""
+{instructor_name}""",
         }
     }
 
@@ -123,7 +120,7 @@ You can view your grade and feedback here: {assignment_url}
 If you have any questions about your grade or the feedback provided, please don't hesitate to reach out.
 
 Best regards,
-{instructor_name}"""
+{instructor_name}""",
         }
     }
 
@@ -133,25 +130,25 @@ Best regards,
             "subject": "Excellent Work on {assignment_name}",
             "body": """{student_name} - Excellent work on {assignment_name}! Score: {score}/{max_score}.
 
-{criterion_name}: Outstanding performance. Your work demonstrates thorough understanding and exceptional quality."""
+{criterion_name}: Outstanding performance. Your work demonstrates thorough understanding and exceptional quality.""",
         },
         "good": {
             "subject": "Good Work on {assignment_name}",
             "body": """{student_name} - Good work on {assignment_name}. Score: {score}/{max_score}.
 
-{criterion_name}: Solid effort that meets expectations. Minor areas for improvement noted."""
+{criterion_name}: Solid effort that meets expectations. Minor areas for improvement noted.""",
         },
         "needs_improvement": {
             "subject": "Feedback on {assignment_name}",
             "body": """{student_name} - Score: {score}/{max_score} on {assignment_name}.
 
-{criterion_name}: This area needs improvement. Please review the rubric criteria and consider revising your approach. Feel free to visit office hours to discuss strategies for strengthening this area."""
+{criterion_name}: This area needs improvement. Please review the rubric criteria and consider revising your approach. Feel free to visit office hours to discuss strategies for strengthening this area.""",
         },
         "missing": {
             "subject": "Missing Submission: {assignment_name}",
             "body": """{student_name} - You have not submitted {assignment_name}. Score: 0/{max_score}.
 
-Please submit your work as soon as possible. If you are experiencing difficulties, reach out immediately so we can discuss options."""
+Please submit your work as soon as possible. If you are experiencing difficulties, reach out immediately so we can discuss options.""",
         },
         "late_submission": {
             "subject": "Late Submission Graded: {assignment_name}",
@@ -159,24 +156,24 @@ Please submit your work as soon as possible. If you are experiencing difficultie
 
 {criterion_name}: {feedback_comment}
 
-Note: A late penalty may have been applied per the course late policy."""
+Note: A late penalty may have been applied per the course late policy.""",
         },
         "criterion_excellent": {
             "subject": "",
-            "body": """{criterion_name}: Excellent ({score}/{max_score}). {feedback_comment}"""
+            "body": """{criterion_name}: Excellent ({score}/{max_score}). {feedback_comment}""",
         },
         "criterion_good": {
             "subject": "",
-            "body": """{criterion_name}: Good ({score}/{max_score}). {feedback_comment}"""
+            "body": """{criterion_name}: Good ({score}/{max_score}). {feedback_comment}""",
         },
         "criterion_needs_work": {
             "subject": "",
-            "body": """{criterion_name}: Needs improvement ({score}/{max_score}). {feedback_comment}"""
+            "body": """{criterion_name}: Needs improvement ({score}/{max_score}). {feedback_comment}""",
         },
         "criterion_missing": {
             "subject": "",
-            "body": """{criterion_name}: Not addressed (0/{max_score}). This criterion was not met. Please review the rubric requirements."""
-        }
+            "body": """{criterion_name}: Not addressed (0/{max_score}). This criterion was not met. Please review the rubric requirements.""",
+        },
     }
 
     @classmethod
@@ -186,7 +183,7 @@ Note: A late penalty may have been applied per the course late policy."""
         assignment_name: str,
         total_score: float,
         max_total: float,
-        criterion_feedbacks: list[dict[str, Any]] | None = None
+        criterion_feedbacks: list[dict[str, Any]] | None = None,
     ) -> str:
         """Compose a complete grading feedback comment from multiple criterion templates.
 
@@ -218,14 +215,18 @@ Note: A late penalty may have been applied per the course late policy."""
 
         # Build header from overall template
         overall_template = cls.GRADING_FEEDBACK_TEMPLATES.get(overall_level, {})
-        header = overall_template.get("body", "Score: {score}/{max_score}").format(
-            student_name=student_name,
-            assignment_name=assignment_name,
-            score=total_score,
-            max_score=max_total,
-            criterion_name="Overall",
-            feedback_comment=""
-        ).strip()
+        header = (
+            overall_template.get("body", "Score: {score}/{max_score}")
+            .format(
+                student_name=student_name,
+                assignment_name=assignment_name,
+                score=total_score,
+                max_score=max_total,
+                criterion_name="Overall",
+                feedback_comment="",
+            )
+            .strip()
+        )
 
         if not criterion_feedbacks:
             return header
@@ -242,7 +243,7 @@ Note: A late penalty may have been applied per the course late policy."""
                 criterion_name=cf.get("criterion_name", "Criterion"),
                 score=cf.get("score", 0),
                 max_score=cf.get("max_score", 0),
-                feedback_comment=cf.get("comment", "")
+                feedback_comment=cf.get("comment", ""),
             ).strip()
             parts.append(formatted)
 
@@ -265,7 +266,7 @@ Note: A late penalty may have been applied per the course late policy."""
             "assignment": cls.ASSIGNMENT_TEMPLATES,
             "discussion": cls.DISCUSSION_TEMPLATES,
             "grade": cls.GRADE_TEMPLATES,
-            "grading_feedback": cls.GRADING_FEEDBACK_TEMPLATES
+            "grading_feedback": cls.GRADING_FEEDBACK_TEMPLATES,
         }
 
         category_templates = category_map.get(category)
@@ -275,7 +276,9 @@ Note: A late penalty may have been applied per the course late policy."""
         return category_templates.get(template_name)
 
     @classmethod
-    def format_template(cls, template: dict[str, str], variables: dict[str, Any]) -> dict[str, str]:
+    def format_template(
+        cls, template: dict[str, str], variables: dict[str, Any]
+    ) -> dict[str, str]:
         """
         Format a template with provided variables.
 
@@ -290,10 +293,7 @@ Note: A late penalty may have been applied per the course late policy."""
             formatted_subject = template["subject"].format(**variables)
             formatted_body = template["body"].format(**variables)
 
-            return {
-                "subject": formatted_subject,
-                "body": formatted_body
-            }
+            return {"subject": formatted_subject, "body": formatted_body}
         except KeyError as err:
             raise ValueError(f"Missing template variable: {err}") from err
         except Exception as err:
@@ -301,10 +301,7 @@ Note: A late penalty may have been applied per the course late policy."""
 
     @classmethod
     def get_formatted_template(
-        cls,
-        category: str,
-        template_name: str,
-        variables: dict[str, Any]
+        cls, category: str, template_name: str, variables: dict[str, Any]
     ) -> dict[str, str] | None:
         """
         Get and format a template in one step.
@@ -336,7 +333,7 @@ Note: A late penalty may have been applied per the course late policy."""
             "assignment": list(cls.ASSIGNMENT_TEMPLATES.keys()),
             "discussion": list(cls.DISCUSSION_TEMPLATES.keys()),
             "grade": list(cls.GRADE_TEMPLATES.keys()),
-            "grading_feedback": list(cls.GRADING_FEEDBACK_TEMPLATES.keys())
+            "grading_feedback": list(cls.GRADING_FEEDBACK_TEMPLATES.keys()),
         }
 
     @classmethod
@@ -361,7 +358,7 @@ Note: A late penalty may have been applied per the course late policy."""
         variables = set()
         for content in [template["subject"], template["body"]]:
             # Find all {variable_name} patterns
-            matches = re.findall(r'\{([^}]+)\}', content)
+            matches = re.findall(r"\{([^}]+)\}", content)
             variables.update(matches)
 
         return sorted(variables)
@@ -372,7 +369,7 @@ def create_default_variables(
     assignment_name: str = "Assignment",
     instructor_name: str = "Instructor",
     course_name: str = "Course",
-    **kwargs: Any
+    **kwargs: Any,
 ) -> dict[str, Any]:
     """
     Create a default set of template variables.
@@ -398,7 +395,7 @@ def create_default_variables(
         "total_assigned": "2",
         "completed_count": "0",
         "remaining_count": "2",
-        "assignment_description": ""
+        "assignment_description": "",
     }
 
     # Override with any provided kwargs

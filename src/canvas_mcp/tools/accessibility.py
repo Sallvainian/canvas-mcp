@@ -7,7 +7,7 @@ for common accessibility issues.
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -22,8 +22,7 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def fetch_ufixit_report(
-        course_identifier: Union[str, int],
-        page_title: str = "UFIXIT"
+        course_identifier: str | int, page_title: str = "UFIXIT"
     ) -> str:
         """Fetch UFIXIT accessibility report from Canvas course pages.
 
@@ -41,18 +40,19 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
 
         # First, try to find the page by title
         pages = await fetch_all_paginated_results(
-            f"/courses/{course_id}/pages",
-            {"per_page": 100, "search_term": page_title}
+            f"/courses/{course_id}/pages", {"per_page": 100, "search_term": page_title}
         )
 
         if isinstance(pages, dict) and "error" in pages:
             return json.dumps({"error": f"Error fetching pages: {pages['error']}"})
 
         if not pages:
-            return json.dumps({
-                "error": f"No page found with title containing '{page_title}'",
-                "suggestion": "Try specifying a different page_title parameter"
-            })
+            return json.dumps(
+                {
+                    "error": f"No page found with title containing '{page_title}'",
+                    "suggestion": "Try specifying a different page_title parameter",
+                }
+            )
 
         # Get the first matching page
         target_page = pages[0]
@@ -63,21 +63,24 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
 
         # Fetch the full page content
         page_response = await make_canvas_request(
-            "get",
-            f"/courses/{course_id}/pages/{page_url}"
+            "get", f"/courses/{course_id}/pages/{page_url}"
         )
 
         if "error" in page_response:
-            return json.dumps({"error": f"Error fetching page content: {page_response['error']}"})
+            return json.dumps(
+                {"error": f"Error fetching page content: {page_response['error']}"}
+            )
 
-        return json.dumps({
-            "page_title": page_response.get("title", "Unknown"),
-            "page_url": page_url,
-            "page_id": page_response.get("page_id"),
-            "body": page_response.get("body", ""),
-            "updated_at": page_response.get("updated_at"),
-            "course_id": course_id
-        })
+        return json.dumps(
+            {
+                "page_title": page_response.get("title", "Unknown"),
+                "page_url": page_url,
+                "page_id": page_response.get("page_id"),
+                "body": page_response.get("body", ""),
+                "updated_at": page_response.get("updated_at"),
+                "course_id": course_id,
+            }
+        )
 
     @mcp.tool()
     @validate_params
@@ -110,15 +113,17 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
         # Generate summary statistics
         summary = _generate_violation_summary(violations)
 
-        return json.dumps({
-            "summary": summary,
-            "violations": violations,
-            "report_metadata": {
-                "page_title": report.get("page_title"),
-                "updated_at": report.get("updated_at"),
-                "course_id": report.get("course_id")
+        return json.dumps(
+            {
+                "summary": summary,
+                "violations": violations,
+                "report_metadata": {
+                    "page_title": report.get("page_title"),
+                    "updated_at": report.get("updated_at"),
+                    "course_id": report.get("course_id"),
+                },
             }
-        })
+        )
 
     @mcp.tool()
     @validate_params
@@ -197,8 +202,7 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
     @mcp.tool()
     @validate_params
     async def scan_course_content_accessibility(
-        course_identifier: Union[str, int],
-        content_types: str = "pages,assignments"
+        course_identifier: str | int, content_types: str = "pages,assignments"
     ) -> str:
         """Scan Canvas course content for basic accessibility issues.
 
@@ -216,13 +220,12 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
         types = [t.strip() for t in content_types.split(",")]
 
-        all_issues: List[Dict[str, Any]] = []
+        all_issues: list[dict[str, Any]] = []
 
         # Scan pages
         if "pages" in types:
             pages = await fetch_all_paginated_results(
-                f"/courses/{course_id}/pages",
-                {"per_page": 100}
+                f"/courses/{course_id}/pages", {"per_page": 100}
             )
             if isinstance(pages, list):
                 for page in pages:
@@ -230,15 +233,14 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
                         page.get("body", ""),
                         content_type="page",
                         content_id=page.get("page_id"),
-                        content_title=page.get("title")
+                        content_title=page.get("title"),
                     )
                     all_issues.extend(issues)
 
         # Scan assignments
         if "assignments" in types:
             assignments = await fetch_all_paginated_results(
-                f"/courses/{course_id}/assignments",
-                {"per_page": 100}
+                f"/courses/{course_id}/assignments", {"per_page": 100}
             )
             if isinstance(assignments, list):
                 for assignment in assignments:
@@ -246,51 +248,53 @@ def register_accessibility_tools(mcp: FastMCP) -> None:
                         assignment.get("description", ""),
                         content_type="assignment",
                         content_id=assignment.get("id"),
-                        content_title=assignment.get("name")
+                        content_title=assignment.get("name"),
                     )
                     all_issues.extend(issues)
 
         # Generate summary
         summary = _generate_violation_summary(all_issues)
 
-        return json.dumps({
-            "summary": summary,
-            "issues": all_issues,
-            "scanned_types": types
-        })
+        return json.dumps(
+            {"summary": summary, "issues": all_issues, "scanned_types": types}
+        )
 
 
-def _extract_violations_from_html(html_content: str) -> List[Dict[str, Any]]:
+def _extract_violations_from_html(html_content: str) -> list[dict[str, Any]]:
     """Extract accessibility violations from UFIXIT report HTML.
 
     This parser handles common UFIXIT/UDOIT report formats.
     """
-    violations: List[Dict[str, Any]] = []
+    violations: list[dict[str, Any]] = []
 
     # Try to find violation patterns in the HTML
     # UFIXIT reports often use tables or lists to display violations
 
     # Pattern 1: Look for WCAG criterion mentions
-    wcag_pattern = r'WCAG\s+(\d+\.\d+\.\d+)'
-    wcag_matches = re.finditer(wcag_pattern, html_content, re.IGNORECASE)
+    wcag_pattern = r"WCAG\s+(\d+\.\d+\.\d+)"
+    _wcag_matches = re.finditer(wcag_pattern, html_content, re.IGNORECASE)
 
     # Pattern 2: Look for severity indicators
-    severity_pattern = r'(critical|serious|moderate|minor|error|warning)'
+    severity_pattern = r"(critical|serious|moderate|minor|error|warning)"
 
     # Pattern 3: Look for common issue types
     issue_patterns = [
-        (r'missing\s+alt\s+text', 'missing_alt_text', 'Images missing alternative text'),
-        (r'heading\s+structure', 'heading_structure', 'Improper heading hierarchy'),
-        (r'color\s+contrast', 'color_contrast', 'Insufficient color contrast'),
-        (r'link\s+text', 'link_text', 'Non-descriptive link text'),
-        (r'table\s+header', 'table_headers', 'Tables missing proper headers'),
-        (r'form\s+label', 'form_labels', 'Form inputs missing labels'),
+        (
+            r"missing\s+alt\s+text",
+            "missing_alt_text",
+            "Images missing alternative text",
+        ),
+        (r"heading\s+structure", "heading_structure", "Improper heading hierarchy"),
+        (r"color\s+contrast", "color_contrast", "Insufficient color contrast"),
+        (r"link\s+text", "link_text", "Non-descriptive link text"),
+        (r"table\s+header", "table_headers", "Tables missing proper headers"),
+        (r"form\s+label", "form_labels", "Form inputs missing labels"),
     ]
 
     # Extract structured violations from HTML
     # This is a simplified parser - real UFIXIT reports may have different formats
-    lines = html_content.split('\n')
-    current_violation: Dict[str, Any] = {}
+    lines = html_content.split("\n")
+    current_violation: dict[str, Any] = {}
 
     for line in lines:
         # Check for WCAG criterion
@@ -301,7 +305,7 @@ def _extract_violations_from_html(html_content: str) -> List[Dict[str, Any]]:
             current_violation = {
                 "wcag_criterion": wcag_match.group(1),
                 "type": "unknown",
-                "severity": "moderate"
+                "severity": "moderate",
             }
 
         # Check for severity
@@ -317,9 +321,11 @@ def _extract_violations_from_html(html_content: str) -> List[Dict[str, Any]]:
                     current_violation["description"] = description
 
         # Extract location information
-        if 'page' in line.lower() or 'assignment' in line.lower():
+        if "page" in line.lower() or "assignment" in line.lower():
             if current_violation and "location" not in current_violation:
-                current_violation["location"] = re.sub(r'<[^>]+>', '', line).strip()[:100]
+                current_violation["location"] = re.sub(r"<[^>]+>", "", line).strip()[
+                    :100
+                ]
 
     if current_violation:
         violations.append(current_violation)
@@ -330,96 +336,106 @@ def _extract_violations_from_html(html_content: str) -> List[Dict[str, Any]]:
 def _check_content_accessibility(
     html_content: str,
     content_type: str,
-    content_id: Optional[int],
-    content_title: Optional[str]
-) -> List[Dict[str, Any]]:
+    content_id: int | None,
+    content_title: str | None,
+) -> list[dict[str, Any]]:
     """Check HTML content for basic accessibility issues."""
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
 
     if not html_content:
         return issues
 
     # Check for images without alt text
-    img_pattern = r'<img(?![^>]*alt=)[^>]*>'
-    for match in re.finditer(img_pattern, html_content, re.IGNORECASE):
-        issues.append({
-            "type": "missing_alt_text",
-            "wcag_criterion": "1.1.1",
-            "wcag_level": "A",
-            "severity": "serious",
-            "content_type": content_type,
-            "content_id": content_id,
-            "content_title": content_title,
-            "description": "Image missing alt attribute",
-            "remediation": "Add descriptive alt text to all images",
-            "auto_fixable": False
-        })
+    img_pattern = r"<img(?![^>]*alt=)[^>]*>"
+    for _match in re.finditer(img_pattern, html_content, re.IGNORECASE):
+        issues.append(
+            {
+                "type": "missing_alt_text",
+                "wcag_criterion": "1.1.1",
+                "wcag_level": "A",
+                "severity": "serious",
+                "content_type": content_type,
+                "content_id": content_id,
+                "content_title": content_title,
+                "description": "Image missing alt attribute",
+                "remediation": "Add descriptive alt text to all images",
+                "auto_fixable": False,
+            }
+        )
 
     # Check for empty headings
-    empty_heading_pattern = r'<h[1-6][^>]*>\s*</h[1-6]>'
-    for match in re.finditer(empty_heading_pattern, html_content, re.IGNORECASE):
-        issues.append({
-            "type": "empty_heading",
-            "wcag_criterion": "2.4.6",
-            "wcag_level": "AA",
-            "severity": "moderate",
-            "content_type": content_type,
-            "content_id": content_id,
-            "content_title": content_title,
-            "description": "Empty heading element found",
-            "remediation": "Remove empty headings or add descriptive text",
-            "auto_fixable": False
-        })
-
-    # Check for tables without headers
-    table_without_th = r'<table(?:(?!<th).)*?</table>'
-    for match in re.finditer(table_without_th, html_content, re.IGNORECASE | re.DOTALL):
-        issues.append({
-            "type": "table_without_headers",
-            "wcag_criterion": "1.3.1",
-            "wcag_level": "A",
-            "severity": "serious",
-            "content_type": content_type,
-            "content_id": content_id,
-            "content_title": content_title,
-            "description": "Table missing header cells",
-            "remediation": "Add <th> elements to define table headers",
-            "auto_fixable": False
-        })
-
-    # Check for non-descriptive link text
-    bad_link_patterns = [
-        r'<a[^>]*>click here</a>',
-        r'<a[^>]*>here</a>',
-        r'<a[^>]*>read more</a>',
-        r'<a[^>]*>more</a>',
-    ]
-    for pattern in bad_link_patterns:
-        for match in re.finditer(pattern, html_content, re.IGNORECASE):
-            issues.append({
-                "type": "non_descriptive_link",
-                "wcag_criterion": "2.4.4",
-                "wcag_level": "A",
+    empty_heading_pattern = r"<h[1-6][^>]*>\s*</h[1-6]>"
+    for _match in re.finditer(empty_heading_pattern, html_content, re.IGNORECASE):
+        issues.append(
+            {
+                "type": "empty_heading",
+                "wcag_criterion": "2.4.6",
+                "wcag_level": "AA",
                 "severity": "moderate",
                 "content_type": content_type,
                 "content_id": content_id,
                 "content_title": content_title,
-                "description": "Link text is not descriptive",
-                "remediation": "Use descriptive link text that explains the destination",
-                "auto_fixable": False
-            })
+                "description": "Empty heading element found",
+                "remediation": "Remove empty headings or add descriptive text",
+                "auto_fixable": False,
+            }
+        )
+
+    # Check for tables without headers
+    table_without_th = r"<table(?:(?!<th).)*?</table>"
+    for _match in re.finditer(
+        table_without_th, html_content, re.IGNORECASE | re.DOTALL
+    ):
+        issues.append(
+            {
+                "type": "table_without_headers",
+                "wcag_criterion": "1.3.1",
+                "wcag_level": "A",
+                "severity": "serious",
+                "content_type": content_type,
+                "content_id": content_id,
+                "content_title": content_title,
+                "description": "Table missing header cells",
+                "remediation": "Add <th> elements to define table headers",
+                "auto_fixable": False,
+            }
+        )
+
+    # Check for non-descriptive link text
+    bad_link_patterns = [
+        r"<a[^>]*>click here</a>",
+        r"<a[^>]*>here</a>",
+        r"<a[^>]*>read more</a>",
+        r"<a[^>]*>more</a>",
+    ]
+    for pattern in bad_link_patterns:
+        for _match in re.finditer(pattern, html_content, re.IGNORECASE):
+            issues.append(
+                {
+                    "type": "non_descriptive_link",
+                    "wcag_criterion": "2.4.4",
+                    "wcag_level": "A",
+                    "severity": "moderate",
+                    "content_type": content_type,
+                    "content_id": content_id,
+                    "content_title": content_title,
+                    "description": "Link text is not descriptive",
+                    "remediation": "Use descriptive link text that explains the destination",
+                    "auto_fixable": False,
+                }
+            )
 
     return issues
 
 
-def _generate_violation_summary(violations: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _generate_violation_summary(violations: list[dict[str, Any]]) -> dict[str, Any]:
     """Generate summary statistics from violations."""
-    summary: Dict[str, Any] = {
+    summary: dict[str, Any] = {
         "total_violations": len(violations),
         "by_severity": {},
         "by_type": {},
         "by_wcag_criterion": {},
-        "by_content_type": {}
+        "by_content_type": {},
     }
 
     for violation in violations:
@@ -433,10 +449,14 @@ def _generate_violation_summary(violations: List[Dict[str, Any]]) -> Dict[str, A
 
         # Count by WCAG criterion
         wcag = violation.get("wcag_criterion", "unknown")
-        summary["by_wcag_criterion"][wcag] = summary["by_wcag_criterion"].get(wcag, 0) + 1
+        summary["by_wcag_criterion"][wcag] = (
+            summary["by_wcag_criterion"].get(wcag, 0) + 1
+        )
 
         # Count by content type
         content_type = violation.get("content_type", "unknown")
-        summary["by_content_type"][content_type] = summary["by_content_type"].get(content_type, 0) + 1
+        summary["by_content_type"][content_type] = (
+            summary["by_content_type"].get(content_type, 0) + 1
+        )
 
     return summary

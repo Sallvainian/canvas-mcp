@@ -16,10 +16,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def export_grades(
-        course_identifier: str | int,
-        format: str = "csv"
-    ) -> str:
+    async def export_grades(course_identifier: str | int, format: str = "csv") -> str:
         """Export gradebook data for a course.
 
         Fetches all assignments and student submissions to generate a gradebook export.
@@ -33,27 +30,32 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         # Fetch students
         students = await fetch_all_paginated_results(
             f"/courses/{course_id}/users",
-            {"enrollment_type[]": "student", "per_page": 100}
+            {"enrollment_type[]": "student", "per_page": 100},
         )
         if isinstance(students, dict) and "error" in students:
             return f"Error fetching students: {students['error']}"
 
         # Fetch assignments
         assignments = await fetch_all_paginated_results(
-            f"/courses/{course_id}/assignments",
-            {"per_page": 100}
+            f"/courses/{course_id}/assignments", {"per_page": 100}
         )
         if isinstance(assignments, dict) and "error" in assignments:
             return f"Error fetching assignments: {assignments['error']}"
 
         student_list = students if isinstance(students, list) else []
-        assignment_list = [a for a in (assignments if isinstance(assignments, list) else []) if a.get("published")]
+        assignment_list = [
+            a
+            for a in (assignments if isinstance(assignments, list) else [])
+            if a.get("published")
+        ]
 
         if not student_list:
             return "No students found."
 
         # Fetch submissions for each assignment
-        grade_data: dict[str, dict[str, str]] = {}  # student_id -> {assignment_id -> grade}
+        grade_data: dict[str, dict[str, str]] = (
+            {}
+        )  # student_id -> {assignment_id -> grade}
         for student in student_list:
             sid = str(student.get("id", ""))
             grade_data[sid] = {}
@@ -61,8 +63,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         for assignment in assignment_list:
             aid = str(assignment.get("id", ""))
             submissions = await fetch_all_paginated_results(
-                f"/courses/{course_id}/assignments/{aid}/submissions",
-                {"per_page": 100}
+                f"/courses/{course_id}/assignments/{aid}/submissions", {"per_page": 100}
             )
             if isinstance(submissions, list):
                 for sub in submissions:
@@ -80,7 +81,9 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
             # Header row
             header = ["Student ID", "Student Name"]
             for a in assignment_list:
-                header.append(f"{a.get('name', 'Unknown')} ({a.get('points_possible', 0)} pts)")
+                header.append(
+                    f"{a.get('name', 'Unknown')} ({a.get('points_possible', 0)} pts)"
+                )
             header.append("Total")
             writer.writerow(header)
 
@@ -119,9 +122,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @validate_params
-    async def get_assignment_groups(
-        course_identifier: str | int
-    ) -> str:
+    async def get_assignment_groups(course_identifier: str | int) -> str:
         """List assignment groups (weighted grade categories) for a course.
 
         Args:
@@ -130,8 +131,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         course_id = await get_course_id(course_identifier)
 
         groups = await fetch_all_paginated_results(
-            f"/courses/{course_id}/assignment_groups",
-            {"per_page": 100}
+            f"/courses/{course_id}/assignment_groups", {"per_page": 100}
         )
 
         if isinstance(groups, dict) and "error" in groups:
@@ -176,7 +176,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         weight: float = 0,
         position: int | None = None,
         drop_lowest: int | None = None,
-        drop_highest: int | None = None
+        drop_highest: int | None = None,
     ) -> str:
         """Create a new assignment group (weighted grade category) in a course.
 
@@ -190,10 +190,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         """
         course_id = await get_course_id(course_identifier)
 
-        data: dict = {
-            "name": name,
-            "group_weight": weight
-        }
+        data: dict = {"name": name, "group_weight": weight}
 
         if position is not None:
             data["position"] = position
@@ -207,8 +204,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
             data["rules"] = rules
 
         response = await make_canvas_request(
-            "post", f"/courses/{course_id}/assignment_groups",
-            data=data
+            "post", f"/courses/{course_id}/assignment_groups", data=data
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -216,10 +212,12 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
 
         course_display = await get_course_code(course_id) or course_identifier
         new_id = response.get("id")
-        return f"Assignment group created in course {course_display}:\n\n" \
-               f"ID: {new_id}\n" \
-               f"Name: {response.get('name', name)}\n" \
-               f"Weight: {response.get('group_weight', weight)}%"
+        return (
+            f"Assignment group created in course {course_display}:\n\n"
+            f"ID: {new_id}\n"
+            f"Name: {response.get('name', name)}\n"
+            f"Weight: {response.get('group_weight', weight)}%"
+        )
 
     @mcp.tool()
     @validate_params
@@ -230,7 +228,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         weight: float | None = None,
         position: int | None = None,
         drop_lowest: int | None = None,
-        drop_highest: int | None = None
+        drop_highest: int | None = None,
     ) -> str:
         """Update an existing assignment group's settings.
 
@@ -265,8 +263,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
             return "No update parameters provided."
 
         response = await make_canvas_request(
-            "put", f"/courses/{course_id}/assignment_groups/{group_id}",
-            data=data
+            "put", f"/courses/{course_id}/assignment_groups/{group_id}", data=data
         )
 
         if isinstance(response, dict) and "error" in response:
@@ -285,7 +282,7 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         late_submission_minimum_percent_enabled: bool = False,
         late_submission_minimum_percent: float = 0.0,
         missing_submission_deduction_enabled: bool = False,
-        missing_submission_deduction: float = 100.0
+        missing_submission_deduction: float = 100.0,
     ) -> str:
         """Configure the late policy for a course.
 
@@ -315,19 +312,19 @@ def register_gradebook_tools(mcp: FastMCP) -> None:
         data = {"late_policy": policy}
 
         # Try to get existing policy first (PATCH if exists, POST if not)
-        existing = await make_canvas_request(
-            "get", f"/courses/{course_id}/late_policy"
-        )
+        existing = await make_canvas_request("get", f"/courses/{course_id}/late_policy")
 
-        if isinstance(existing, dict) and "error" not in existing and existing.get("late_policy"):
+        if (
+            isinstance(existing, dict)
+            and "error" not in existing
+            and existing.get("late_policy")
+        ):
             response = await make_canvas_request(
-                "put", f"/courses/{course_id}/late_policy",
-                data=data
+                "put", f"/courses/{course_id}/late_policy", data=data
             )
         else:
             response = await make_canvas_request(
-                "post", f"/courses/{course_id}/late_policy",
-                data=data
+                "post", f"/courses/{course_id}/late_policy", data=data
             )
 
         if isinstance(response, dict) and "error" in response:

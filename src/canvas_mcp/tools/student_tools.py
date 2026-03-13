@@ -5,17 +5,16 @@ to access only the student's own data across their enrolled courses.
 """
 
 from datetime import datetime, timedelta
-from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
 from ..core.cache import get_course_code, get_course_id
-from ..core.client import fetch_all_paginated_results, make_canvas_request
+from ..core.client import fetch_all_paginated_results
 from ..core.dates import format_date, parse_date
 from ..core.validation import validate_params
 
 
-def register_student_tools(mcp: FastMCP):
+def register_student_tools(mcp: FastMCP) -> None:
     """Register student-specific MCP tools."""
 
     @mcp.tool()
@@ -30,12 +29,9 @@ def register_student_tools(mcp: FastMCP):
         """
         # Calculate the date range
         end_date = datetime.now() + timedelta(days=days)
-        end_date_str = end_date.strftime("%Y-%m-%d")
-
         # Get upcoming events for the current user
         events = await fetch_all_paginated_results(
-            "/users/self/upcoming_events",
-            params={"per_page": 100}
+            "/users/self/upcoming_events", params={"per_page": 100}
         )
 
         if isinstance(events, dict) and "error" in events:
@@ -72,7 +68,9 @@ def register_student_tools(mcp: FastMCP):
             course_id = assignment.get("course_id")
 
             # Get course name
-            course_display = await get_course_code(course_id) if course_id else "Unknown Course"
+            course_display = (
+                await get_course_code(course_id) if course_id else "Unknown Course"
+            )
 
             # Get submission status
             submission = assignment.get("submission")
@@ -93,7 +91,9 @@ def register_student_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
-    async def get_my_submission_status(course_identifier: str | int | None = None) -> str:
+    async def get_my_submission_status(
+        course_identifier: str | int | None = None,
+    ) -> str:
         """Get your submission status for assignments.
 
         Args:
@@ -108,7 +108,7 @@ def register_student_tools(mcp: FastMCP):
 
             assignments = await fetch_all_paginated_results(
                 f"/courses/{course_id}/assignments",
-                params={"include[]": ["submission"], "per_page": 100}
+                params={"include[]": ["submission"], "per_page": 100},
             )
 
             if isinstance(assignments, dict) and "error" in assignments:
@@ -120,8 +120,7 @@ def register_student_tools(mcp: FastMCP):
         else:
             # Get all courses and their assignments
             courses = await fetch_all_paginated_results(
-                "/courses",
-                params={"enrollment_state": "active", "per_page": 100}
+                "/courses", params={"enrollment_state": "active", "per_page": 100}
             )
 
             if isinstance(courses, dict) and "error" in courses:
@@ -136,11 +135,13 @@ def register_student_tools(mcp: FastMCP):
 
                 assignments = await fetch_all_paginated_results(
                     f"/courses/{course_id}/assignments",
-                    params={"include[]": ["submission"], "per_page": 100}
+                    params={"include[]": ["submission"], "per_page": 100},
                 )
 
                 if not isinstance(assignments, dict) or "error" not in assignments:
-                    for assignment in assignments if isinstance(assignments, list) else []:
+                    for assignment in (
+                        assignments if isinstance(assignments, list) else []
+                    ):
                         assignment["_course_name"] = course_name
                         all_assignments.append(assignment)
 
@@ -176,7 +177,11 @@ def register_student_tools(mcp: FastMCP):
             output_lines.append(f"⚠️  Missing Submissions ({len(missing)}):\n")
             for assignment, status in missing:
                 name = assignment.get("name", "Unnamed")
-                due_at = format_date(assignment.get("due_at")) if assignment.get("due_at") else "No due date"
+                due_at = (
+                    format_date(assignment.get("due_at"))
+                    if assignment.get("due_at")
+                    else "No due date"
+                )
                 course_name = assignment.get("_course_name", "")
 
                 output_lines.append(
@@ -214,8 +219,8 @@ def register_student_tools(mcp: FastMCP):
             params={
                 "enrollment_state": "active",
                 "include[]": ["total_scores", "current_grading_period_scores"],
-                "per_page": 100
-            }
+                "per_page": 100,
+            },
         )
 
         if isinstance(courses, dict) and "error" in courses:
@@ -233,7 +238,9 @@ def register_student_tools(mcp: FastMCP):
             # Get enrollment data (grades)
             enrollments = course.get("enrollments", [])
             if enrollments:
-                enrollment = enrollments[0]  # Student typically has one enrollment per course
+                enrollment = enrollments[
+                    0
+                ]  # Student typically has one enrollment per course
 
                 # Current score
                 current_score = enrollment.get("computed_current_score")
@@ -249,8 +256,7 @@ def register_student_tools(mcp: FastMCP):
                     grade_info = "No grade yet"
 
                 output_lines.append(
-                    f"• {course_code}: {name}\n"
-                    f"  Current Grade: {grade_info}\n"
+                    f"• {course_code}: {name}\n" f"  Current Grade: {grade_info}\n"
                 )
             else:
                 output_lines.append(
@@ -268,8 +274,7 @@ def register_student_tools(mcp: FastMCP):
         quizzes, and discussions that need your attention.
         """
         todos = await fetch_all_paginated_results(
-            "/users/self/todo",
-            params={"per_page": 100}
+            "/users/self/todo", params={"per_page": 100}
         )
 
         if isinstance(todos, dict) and "error" in todos:
@@ -285,10 +290,16 @@ def register_student_tools(mcp: FastMCP):
             assignment = item.get("assignment", {})
 
             name = assignment.get("name") or item.get("title", "Unnamed item")
-            due_at = format_date(assignment.get("due_at")) if assignment.get("due_at") else "No due date"
+            due_at = (
+                format_date(assignment.get("due_at"))
+                if assignment.get("due_at")
+                else "No due date"
+            )
             course_id = item.get("course_id")
 
-            course_display = await get_course_code(course_id) if course_id else "Unknown Course"
+            course_display = (
+                await get_course_code(course_id) if course_id else "Unknown Course"
+            )
 
             output_lines.append(
                 f"• {name}\n"
@@ -301,7 +312,9 @@ def register_student_tools(mcp: FastMCP):
 
     @mcp.tool()
     @validate_params
-    async def get_my_peer_reviews_todo(course_identifier: str | int | None = None) -> str:
+    async def get_my_peer_reviews_todo(
+        course_identifier: str | int | None = None,
+    ) -> str:
         """Get peer reviews you need to complete.
 
         Args:
@@ -314,8 +327,7 @@ def register_student_tools(mcp: FastMCP):
         else:
             # Get all active courses
             courses = await fetch_all_paginated_results(
-                "/courses",
-                params={"enrollment_state": "active", "per_page": 100}
+                "/courses", params={"enrollment_state": "active", "per_page": 100}
             )
             if isinstance(courses, dict) and "error" in courses:
                 return f"Error fetching courses: {courses['error']}"
@@ -327,8 +339,7 @@ def register_student_tools(mcp: FastMCP):
         for course_id in course_ids:
             # Get assignments for this course
             assignments = await fetch_all_paginated_results(
-                f"/courses/{course_id}/assignments",
-                params={"per_page": 100}
+                f"/courses/{course_id}/assignments", params={"per_page": 100}
             )
 
             if isinstance(assignments, dict) and "error" in assignments:
@@ -342,7 +353,7 @@ def register_student_tools(mcp: FastMCP):
                     # Get peer reviews for this assignment
                     peer_reviews = await fetch_all_paginated_results(
                         f"/courses/{course_id}/assignments/{assignment_id}/peer_reviews",
-                        params={"include[]": ["user"], "per_page": 100}
+                        params={"include[]": ["user"], "per_page": 100},
                     )
 
                     if isinstance(peer_reviews, list):
@@ -363,10 +374,11 @@ def register_student_tools(mcp: FastMCP):
         for review in all_peer_reviews:
             assignment_name = review.get("_assignment_name", "Unknown Assignment")
             course_id = review.get("_course_id")
-            course_display = await get_course_code(course_id) if course_id else "Unknown Course"
+            course_display = (
+                await get_course_code(course_id) if course_id else "Unknown Course"
+            )
 
             user_id = review.get("user_id")
-            assessor_id = review.get("assessor_id")
 
             output_lines.append(
                 f"• {assignment_name}\n"

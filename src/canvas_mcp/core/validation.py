@@ -5,13 +5,9 @@ import inspect
 import json
 import types
 from collections.abc import Callable
-from typing import Any, TypeVar, Union, cast, get_args, get_origin, get_type_hints
+from typing import Any, Union, cast, get_args, get_origin, get_type_hints
 
 from .logging import log_error
-
-# Type definitions for parameter validation
-T = TypeVar('T')
-F = TypeVar('F', bound=Callable[..., Any])
 
 
 def format_error(message: str, details: str | None = None) -> dict[str, str]:
@@ -107,8 +103,10 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
 
         # If we get here, none of the types worked
         type_names = ", ".join(str(t) for t in args)
-        raise ValueError(f"Parameter '{param_name}' with value '{value}' (type: {type(value).__name__}) "
-                        f"could not be converted to any of the expected types: {type_names}")
+        raise ValueError(
+            f"Parameter '{param_name}' with value '{value}' (type: {type(value).__name__}) "
+            f"could not be converted to any of the expected types: {type_names}"
+        )
 
     # Handle basic types with conversion
     if expected_type is str:
@@ -116,7 +114,9 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
     elif expected_type is int:
         try:
             if isinstance(value, str) and not value.strip():
-                raise ValueError(f"Parameter '{param_name}' is an empty string, cannot convert to int")
+                raise ValueError(
+                    f"Parameter '{param_name}' is an empty string, cannot convert to int"
+                )
             return int(value)
         except (ValueError, TypeError) as err:
             raise ValueError(
@@ -125,7 +125,9 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
     elif expected_type is float:
         try:
             if isinstance(value, str) and not value.strip():
-                raise ValueError(f"Parameter '{param_name}' is an empty string, cannot convert to float")
+                raise ValueError(
+                    f"Parameter '{param_name}' is an empty string, cannot convert to float"
+                )
             return float(value)
         except (ValueError, TypeError) as err:
             raise ValueError(
@@ -141,11 +143,15 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
             elif value_lower in ("false", "no", "0", "f", "n"):
                 return False
             else:
-                raise ValueError(f"Parameter '{param_name}' with value '{value}' could not be converted to bool")
+                raise ValueError(
+                    f"Parameter '{param_name}' with value '{value}' could not be converted to bool"
+                )
         elif isinstance(value, (int, float)):
             return bool(value)
         else:
-            raise ValueError(f"Parameter '{param_name}' with value '{value}' could not be converted to bool")
+            raise ValueError(
+                f"Parameter '{param_name}' with value '{value}' could not be converted to bool"
+            )
     elif expected_type is list or origin is list:
         if isinstance(value, list):
             return value
@@ -159,9 +165,11 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
                 pass
 
             # Try comma-separated values
-            return [item.strip() for item in value.split(',') if item.strip()]
+            return [item.strip() for item in value.split(",") if item.strip()]
         else:
-            raise ValueError(f"Parameter '{param_name}' with value '{value}' could not be converted to list")
+            raise ValueError(
+                f"Parameter '{param_name}' with value '{value}' could not be converted to list"
+            )
     elif expected_type is dict or origin is dict:
         if isinstance(value, dict):
             return value
@@ -171,24 +179,30 @@ def validate_parameter(param_name: str, value: Any, expected_type: Any) -> Any:
                 if isinstance(parsed, dict):
                     return parsed
                 else:
-                    raise ValueError(f"Parameter '{param_name}' parsed as JSON but is not a dict")
+                    raise ValueError(
+                        f"Parameter '{param_name}' parsed as JSON but is not a dict"
+                    )
             except json.JSONDecodeError as err:
                 raise ValueError(
                     f"Parameter '{param_name}' with value '{value}' could not be parsed as JSON dict"
                 ) from err
         else:
-            raise ValueError(f"Parameter '{param_name}' with value '{value}' could not be converted to dict")
+            raise ValueError(
+                f"Parameter '{param_name}' with value '{value}' could not be converted to dict"
+            )
 
     # For other types, just check if it's an instance
     if isinstance(value, expected_type):
         return value
 
     # If we get here, validation failed
-    raise ValueError(f"Parameter '{param_name}' with value '{value}' (type: {type(value).__name__}) "
-                    f"is not compatible with expected type: {expected_type}")
+    raise ValueError(
+        f"Parameter '{param_name}' with value '{value}' (type: {type(value).__name__}) "
+        f"is not compatible with expected type: {expected_type}"
+    )
 
 
-def validate_params(func: F) -> F:
+def validate_params[F: Callable[..., Any]](func: F) -> F:
     """Decorator to validate function parameters based on type hints."""
     sig = inspect.signature(func)
     type_hints = get_type_hints(func)
@@ -206,11 +220,17 @@ def validate_params(func: F) -> F:
                 try:
                     # Skip return type annotation
                     if param_name != "return":
-                        bound_args.arguments[param_name] = validate_parameter(param_name, param_value, expected_type)
+                        bound_args.arguments[param_name] = validate_parameter(
+                            param_name, param_value, expected_type
+                        )
                 except ValueError as e:
                     # Return error as JSON response
                     error_message = str(e)
-                    log_error(f"Parameter validation error: {error_message}", param_name=param_name, value=param_value)
+                    log_error(
+                        f"Parameter validation error: {error_message}",
+                        param_name=param_name,
+                        value=param_value,
+                    )
                     return json.dumps({"error": error_message})
 
         # Call the original function with validated parameters
