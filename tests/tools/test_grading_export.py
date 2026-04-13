@@ -617,9 +617,10 @@ class TestGradingExport:
         }
         mock_canvas_api["fetch_all_paginated_results"].side_effect = [
             SAMPLE_ASSIGNMENT_GROUPS,
-            SAMPLE_ASSIGNMENTS,
+            SAMPLE_ASSIGNMENTS,  # 2 assignments returned
             SAMPLE_STUDENTS,
-            SAMPLE_SUBMISSIONS,
+            SAMPLE_SUBMISSIONS,  # subs for assignment 12345
+            [],  # subs for assignment 12346
         ]
 
         with patch("canvas_mcp.tools.grading_export.GENDER_CSV_BASE", mock_gender_csv):
@@ -637,9 +638,10 @@ class TestGradingExport:
         """Test that applied filters are recorded in export metadata."""
         mock_canvas_api["fetch_all_paginated_results"].side_effect = [
             SAMPLE_ASSIGNMENT_GROUPS,
-            SAMPLE_ASSIGNMENTS,
+            SAMPLE_ASSIGNMENTS,  # 2 assignments returned
             SAMPLE_STUDENTS,
-            SAMPLE_SUBMISSIONS,
+            SAMPLE_SUBMISSIONS,  # subs for assignment 12345
+            [],  # subs for assignment 12346
         ]
 
         with patch("canvas_mcp.tools.grading_export.GENDER_CSV_BASE", mock_gender_csv):

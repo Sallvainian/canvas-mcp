@@ -264,39 +264,28 @@ async def _fetch_course_data(
         else:
             allowed_student_ids = gender_matches
 
-    # --- Submissions (bulk fetch, batched) ---
+    # --- Submissions (per-assignment fetch) ---
+    # Uses the per-assignment endpoint which supports page-based pagination,
+    # unlike /students/submissions which requires cursor-based pagination
+    # that fetch_all_paginated_results doesn't support.
     assignment_ids = [a["id"] for a in assignments if "id" in a]
-    all_submissions: list[dict[str, Any]] = []
-    batch_size = 10
+    subs_by_assignment: dict[int, list[dict[str, Any]]] = {
+        aid: [] for aid in assignment_ids
+    }
 
-    for i in range(0, len(assignment_ids), batch_size):
-        batch = assignment_ids[i : i + batch_size]
-        params: dict[str, Any] = {
-            "student_ids[]": "all",
-            "assignment_ids[]": [str(aid) for aid in batch],
-            "per_page": 100,
-        }
+    for aid in assignment_ids:
         subs = await fetch_all_paginated_results(
-            f"/courses/{course_id}/students/submissions",
-            params,
+            f"/courses/{course_id}/assignments/{aid}/submissions",
+            {"per_page": 100},
             skip_anonymization=True,
         )
         if isinstance(subs, dict) and "error" in subs:
             warnings.append(
-                f"Error fetching submissions batch for {period}: {subs['error']}"
+                f"Error fetching submissions for assignment {aid} in {period}: {subs['error']}"
             )
             continue
         if isinstance(subs, list):
-            all_submissions.extend(subs)
-
-    # --- Group submissions by assignment ---
-    subs_by_assignment: dict[int, list[dict[str, Any]]] = {
-        aid: [] for aid in assignment_ids
-    }
-    for sub in all_submissions:
-        aid = sub.get("assignment_id")
-        if aid in subs_by_assignment:
-            subs_by_assignment[aid].append(sub)
+            subs_by_assignment[aid] = subs
 
     # --- Parse grade filter once ---
     grade_range: tuple[float, float] | None = None
