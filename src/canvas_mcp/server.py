@@ -29,6 +29,7 @@ from .tools import (
     register_discussion_tools,
     register_enrollment_tools,
     register_gradebook_tools,
+    register_grading_export_tools,
     register_messaging_tools,
     register_module_tools,
     register_page_tools,
@@ -75,6 +76,7 @@ def register_all_tools(mcp: FastMCP) -> None:
     register_search_helper_tools(mcp)
     register_quiz_tools(mcp)
     register_gradebook_tools(mcp)
+    register_grading_export_tools(mcp)
     register_content_migration_tools(mcp)
 
     # Conditionally register student tools

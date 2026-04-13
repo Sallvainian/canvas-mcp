@@ -12,6 +12,7 @@ from .discussion_analytics import register_discussion_analytics_tools
 from .discussions import register_discussion_tools
 from .enrollment import register_enrollment_tools
 from .gradebook import register_gradebook_tools
+from .grading_export import register_grading_export_tools
 from .messaging import register_messaging_tools
 from .modules import register_module_tools
 from .pages import register_page_tools
@@ -45,5 +46,6 @@ __all__ = [
     "register_search_helper_tools",
     "register_quiz_tools",
     "register_gradebook_tools",
+    "register_grading_export_tools",
     "register_content_migration_tools",
 ]
