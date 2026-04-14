@@ -200,13 +200,20 @@ async def _fetch_course_data(
             assignments = [a for a in assignments if query in a.get("name", "").lower()]
 
     if assignment_group_filter:
-        query = assignment_group_filter.strip().lower()
-        matching_group_ids = {
-            gid for gid, name in group_name_map.items() if query in name.lower()
-        }
-        assignments = [
-            a for a in assignments if a.get("assignment_group_id") in matching_group_ids
-        ]
+        q = assignment_group_filter.strip()
+        if q.isdigit():
+            target_gid = int(q)
+            assignments = [
+                a for a in assignments if a.get("assignment_group_id") == target_gid
+            ]
+        else:
+            query = q.lower()
+            matching_group_ids = {
+                gid for gid, name in group_name_map.items() if query in name.lower()
+            }
+            assignments = [
+                a for a in assignments if a.get("assignment_group_id") in matching_group_ids
+            ]
 
     if date_range_filter:
         try:
@@ -417,6 +424,7 @@ async def _fetch_course_data(
                 {
                     "assignment_id": aid,
                     "assignment_name": assignment.get("name", "Unknown"),
+                    "assignment_group_id": group_id,
                     "assignment_group": group_name,
                     "course_id": course_id,
                     "period": period,
@@ -461,7 +469,7 @@ def register_grading_export_tools(mcp: FastMCP) -> None:
         Args:
             course: Period code (P1, P3, P4, P6, P7, P9) or "all". Default: all.
             assignment: Assignment name (fuzzy match) or Canvas ID.
-            assignment_group: Assignment group name (e.g., "Classwork", "Tests").
+            assignment_group: Assignment group name (e.g., "Classwork", "Tests") or numeric group ID.
             student: Student name (fuzzy match) or Canvas ID.
             gender: M or F. Cross-references anonymization map CSVs.
             submission_state: submitted, graded, unsubmitted, or pending_review.

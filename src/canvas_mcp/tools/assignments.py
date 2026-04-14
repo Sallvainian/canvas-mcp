@@ -172,11 +172,17 @@ def register_assignment_tools(mcp: FastMCP) -> None:
             if isinstance(assignment_groups, dict) and "error" in assignment_groups:
                 return f"Error fetching assignments: {assignment_groups['error']}"
 
-            # Extract assignments from all groups
+            # Extract assignments from all groups. Canvas usually returns
+            # assignment_group_id on each nested assignment, but fall back to
+            # the parent group's id when it's absent so downstream formatting
+            # and filtering never silently see a missing field.
             all_assignments = []
             for group in assignment_groups:
-                assignments = group.get("assignments", [])
-                all_assignments.extend(assignments)
+                gid = group.get("id")
+                for a in group.get("assignments", []):
+                    if gid is not None:
+                        a.setdefault("assignment_group_id", gid)
+                    all_assignments.append(a)
         else:
             # Standard endpoint without grading period filter
             params = {
@@ -221,9 +227,10 @@ def register_assignment_tools(mcp: FastMCP) -> None:
                 due_at = format_date(assignment.get("due_at")) if assignment.get("due_at") else "No due date"
                 points = assignment.get("points_possible", 0)
 
-                assignments_info.append(
-                    f"ID: {assignment_id}\nName: {name}\nDue: {due_at}\nPoints: {points}\n"
-                )
+                info = f"ID: {assignment_id}\nName: {name}\nDue: {due_at}\nPoints: {points}\n"
+                if v == Verbosity.VERBOSE:
+                    info += f"Assignment Group ID: {assignment.get('assignment_group_id', 'N/A')}\n"
+                assignments_info.append(info)
 
             header = f"Assignments for Course {course_display}"
             if grading_period_id:
@@ -258,7 +265,8 @@ def register_assignment_tools(mcp: FastMCP) -> None:
             f"Points Possible: {response.get('points_possible', 'N/A')}",
             f"Submission Types: {', '.join(response.get('submission_types', ['N/A']))}",
             f"Published: {response.get('published', False)}",
-            f"Locked: {response.get('locked_for_user', False)}"
+            f"Locked: {response.get('locked_for_user', False)}",
+            f"Assignment Group ID: {response.get('assignment_group_id', 'N/A')}"
         ]
 
         if response.get("external_tool_tag_attributes"):
@@ -283,7 +291,8 @@ def register_assignment_tools(mcp: FastMCP) -> None:
         lock_at: str | None = None,
         unlock_at: str | None = None,
         submission_types: str | None = None,
-        external_tool_url: str | None = None
+        external_tool_url: str | None = None,
+        assignment_group_id: int | None = None
     ) -> str:
         """Update an assignment's properties.
 
@@ -301,6 +310,8 @@ def register_assignment_tools(mcp: FastMCP) -> None:
             unlock_at: Date to unlock the assignment (same format as due_at)
             submission_types: Comma-separated list of submission types (e.g., "external_tool", "online_upload,online_text_entry")
             external_tool_url: URL for external tool submissions (used with submission_types="external_tool")
+            assignment_group_id: Assignment group ID to move the assignment into
+                (use list_assignment_groups or get_assignment_details to find IDs)
         """
         course_id = await get_course_id(course_identifier)
         assignment_id_str = str(assignment_id)
@@ -344,6 +355,9 @@ def register_assignment_tools(mcp: FastMCP) -> None:
 
         if external_tool_url is not None:
             assignment_data["external_tool_tag_attributes"] = {"url": external_tool_url}
+
+        if assignment_group_id is not None:
+            assignment_data["assignment_group_id"] = assignment_group_id
 
         # Validate that at least one field is being updated
         if not assignment_data:
