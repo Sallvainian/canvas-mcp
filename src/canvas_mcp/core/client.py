@@ -1,6 +1,7 @@
 """HTTP client and Canvas API utilities."""
 
 import asyncio
+import re
 from typing import Any
 from urllib.parse import urlencode
 
@@ -297,6 +298,20 @@ async def upload_file_multipart(
         return {"error": f"File upload failed: {str(e)}"}
 
 
+def _parse_link_header(header: str) -> dict[str, str]:
+    """Parse a Link header into a dict of rel → URL mappings.
+
+    Example input: '<https://...?page=2>; rel="next", <https://...?page=1>; rel="prev"'
+    Returns: {"next": "https://...?page=2", "prev": "https://...?page=1"}
+    """
+    links: dict[str, str] = {}
+    for part in header.split(","):
+        match = re.match(r'\s*<([^>]+)>\s*;\s*rel="([^"]+)"', part.strip())
+        if match:
+            links[match.group(2)] = match.group(1)
+    return links
+
+
 async def fetch_all_paginated_results(
     endpoint: str,
     params: dict[str, Any] | None = None,
@@ -305,52 +320,67 @@ async def fetch_all_paginated_results(
 ) -> Any:
     """Fetch all results from a paginated Canvas API endpoint.
 
-    Handles pagination automatically and applies anonymization once to the complete dataset
-    to ensure consistent anonymization across all pages.
+    Follows Link header pagination (rel="next") instead of page numbers,
+    which is required by Canvas for many endpoints. Applies anonymization
+    once to the complete dataset.
 
     Args:
         endpoint: The Canvas API endpoint to fetch from
         params: Query parameters for the request
         skip_anonymization: If True, skip anonymization entirely (for internal tools like anonymization map)
     """
+    from .config import get_config
+
+    config = get_config()
+    client = _get_http_client()
+
     if params is None:
         params = {}
 
-    # Ensure we get a reasonable number per page
     if "per_page" not in params:
         params["per_page"] = 100
 
+    # Build the initial URL
+    if not endpoint.startswith("/"):
+        endpoint = f"/{endpoint}"
+    url: str | None = f"{config.api_base_url.rstrip('/')}{endpoint}"
+
     all_results: list[Any] = []
-    page = 1
 
-    while True:
-        current_params = {**params, "page": page}
-        # Skip anonymization on individual pages - we'll anonymize the complete dataset
-        response = await make_canvas_request(
-            "get", endpoint, params=current_params, skip_anonymization=True
-        )
+    while url:
+        try:
+            response = await client.get(url, params=params if not all_results else None)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            error_detail = str(e)
+            try:
+                error_detail = e.response.json()
+            except Exception:
+                pass
+            log_error(f"HTTP error fetching {url}: {error_detail}")
+            return {"error": f"HTTP error: {e.response.status_code}, Details: {error_detail}"}
+        except httpx.RequestError as e:
+            log_error(f"Request error fetching {url}: {e}")
+            return {"error": f"Request error: {e}"}
 
-        if isinstance(response, dict) and "error" in response:
-            log_error(f"Error fetching page {page}: {response['error']}")
-            return response
+        data = response.json()
 
-        if not response or not isinstance(response, list) or len(response) == 0:
+        if isinstance(data, dict) and "error" in data:
+            log_error(f"API error fetching {url}: {data['error']}")
+            return data
+
+        if not data or not isinstance(data, list) or len(data) == 0:
             break
 
-        all_results.extend(response)
+        all_results.extend(data)
 
-        # If we got fewer results than requested per page, we're done
-        if len(response) < params.get("per_page", 100):
-            break
+        # Follow Link header for next page
+        link_header = response.headers.get("link", "")
+        links = _parse_link_header(link_header) if link_header else {}
+        url = links.get("next")
 
-        page += 1
-
-    # Apply anonymization to the complete result set if needed (unless explicitly skipped)
+    # Apply anonymization to the complete result set if needed
     if not skip_anonymization:
-        from .config import get_config
-
-        config = get_config()
-
         if config.enable_data_anonymization and _should_anonymize_endpoint(endpoint):
             data_type = _determine_data_type(endpoint)
             all_results = anonymize_response_data(all_results, data_type)

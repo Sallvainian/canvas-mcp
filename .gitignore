@@ -33,6 +33,7 @@ build/
 *.swp
 *.swo
 .cursorrules
+.cursor/
 
 # macOS specific files
 .DS_Store

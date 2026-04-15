@@ -1,201 +1,241 @@
-# Canvas MCP - Source Tree Analysis
+# Source Tree Analysis
 
-**Generated:** 2026-03-12 | **Scan Level:** Exhaustive
+**Project:** canvas-mcp
+**Version:** 1.0.6
+**Generated:** 2026-04-14 (full rescan, exhaustive)
+**Repository type:** Monolith (single part)
+**Primary language:** Python 3.12+ · **Secondary:** TypeScript (bulk-operation submodule)
 
 ---
 
-## Directory Structure
+## Annotated Directory Tree
 
 ```
-canvas-mcp/                          # Project root
-├── pyproject.toml                   # Python project config (hatchling build)
-├── package.json                     # Node.js config for TypeScript code API
-├── tsconfig.json                    # TypeScript compiler configuration
-├── uv.lock                          # Locked Python dependencies
-├── package-lock.json                # Locked Node.js dependencies
-├── env.template                     # Environment variable template
-├── Dockerfile                       # Docker deployment (Python 3.12-slim)
-├── server.json                      # MCP registry metadata (v1.0.6)
-├── start_canvas_server.sh           # Startup script with env loading
-├── LICENSE                          # MIT License
-├── README.md                        # * Primary project documentation
-├── AGENTS.md                        # * AI agent usage guide
-├── SECURITY.md                      # * Security policy
+canvas-mcp/
+├── src/canvas_mcp/                # Python package — all application code
+│   ├── __init__.py                # Package exports (__version__ = "1.0.6") and `main` re-export
+│   ├── server.py                  # ▶ Entry point: FastMCP server bootstrap + CLI (`canvas-mcp-server`)
+│   │
+│   ├── core/                      # Shared infrastructure (no MCP tools; used by every tool module)
+│   │   ├── __init__.py            # Public facade — re-exports from all submodules
+│   │   ├── client.py              # HTTP client: `make_canvas_request`, pagination, 429-retry, file upload, progress polling
+│   │   ├── config.py              # Env-var config loader (~22 knobs); singleton `Config` via `get_config()`
+│   │   ├── cache.py               # Bidirectional course_code ↔ ID cache; `get_course_id()` supports ID/code/SIS formats
+│   │   ├── validation.py          # `@validate_params` decorator + type coercion (Union, Optional, JSON→list, CSV→list)
+│   │   ├── dates.py               # ISO 8601 parsing, `format_date_smart()` with standard/compact/relative modes
+│   │   ├── anonymization.py       # FERPA: hash-based anonymous IDs, PII redaction, type-dispatched anonymizers
+│   │   ├── logging.py             # Structured logger "canvas_mcp" → stderr with context kwargs
+│   │   ├── response_formatter.py  # Verbosity enum (COMPACT/STANDARD/VERBOSE) + `format_*` helpers for tokens
+│   │   ├── types.py               # TypedDicts: CourseInfo, AssignmentInfo, PageInfo, AnnouncementInfo
+│   │   ├── peer_reviews.py        # `PeerReviewAnalyzer` class — completion analytics, follow-up lists
+│   │   └── peer_review_comments.py# `PeerReviewCommentAnalyzer` — quality scoring, sentiment, flagging
+│   │
+│   ├── tools/                     # ▶ All MCP tool registrations — 23 modules, 129 tools
+│   │   ├── __init__.py            # Exports all `register_*_tools` functions
+│   │   ├── accessibility.py       # 4 tools — UFIXIT accessibility reports + WCAG violation parsing
+│   │   ├── analytics.py           # 11 tools — cross-course student/assignment analytics + anonymization mapping
+│   │   ├── assignment_analytics.py# 9 tools — submission list/content/comments/history + ungraded/resubmitted
+│   │   ├── assignments.py         # 8 tools — assignment CRUD + grading periods + peer review assignment
+│   │   ├── code_execution.py      # 2 tools (developer-only) — TS sandbox execution + module discovery
+│   │   ├── content_migrations.py  # 1 tool — copy course content (selective items)
+│   │   ├── courses.py             # 3 tools — list/details/content overview
+│   │   ├── discovery.py           # 1 tool (developer-only) — search code_api functions
+│   │   ├── discussion_analytics.py# 3 tools — participation summary, auto-grade, export
+│   │   ├── discussions.py         # 11 tools — topics + entries + announcements CRUD + replies
+│   │   ├── enrollment.py          # 5 tools — create user, enroll, groups, users, submit-for-student
+│   │   ├── gradebook.py           # 5 tools — export, assignment groups, late policy
+│   │   ├── grading_export.py      # 1 tool ★ NEW (commit a4630f7, 0307c55) — per-assignment bulk submission CSV export
+│   │   ├── message_templates.py   # 0 tools — `MessageTemplates` helper class only
+│   │   ├── messaging.py           # 8 tools — Canvas conversations (form-data POST /conversations)
+│   │   ├── modules.py             # 8 tools — modules + module items CRUD
+│   │   ├── pages.py               # 8 tools — wiki pages CRUD + `bulk_update_pages`
+│   │   ├── peer_review_comments.py# 5 tools — comments, quality analysis, CSV/JSON export, reports
+│   │   ├── peer_reviews.py        # 4 tools — assignments, completion analytics, reports, follow-up
+│   │   ├── quizzes.py             # 13 tools — quiz + question CRUD + publish/unpublish + stats + submissions
+│   │   ├── rubrics.py             # 8 tools — rubric CRUD + assignment association
+│   │   ├── rubric_grading.py      # 3 tools — per-submission rubric grade + bulk grade endpoint fallback
+│   │   ├── search_helpers.py      # 3 tools — find_assignment/find_student/find_discussion (name search)
+│   │   └── student_tools.py       # 5 tools (student role) — upcoming, grades, TODOs, peer reviews
+│   │
+│   ├── resources/                 # MCP resources + prompts
+│   │   ├── __init__.py            # Re-exports `register_resources_and_prompts`
+│   │   └── resources.py           # 3 resources (course-syllabus, assignment-description, code-api-file) + 1 prompt (summarize-course)
+│   │
+│   └── code_api/                  # ▶ TypeScript submodule — token-efficient bulk ops via code execution
+│       ├── index.ts               # Barrel export of all TS functions
+│       ├── client.ts              # Canvas HTTP client (retry, pagination, form-encoding); init from env
+│       ├── README.md              # Submodule usage docs
+│       └── canvas/
+│           ├── courses/           # listCourses, getCourseDetails
+│           ├── assignments/       # listSubmissions (paginated, include[]=user)
+│           ├── communications/    # sendMessage (POST /conversations)
+│           ├── discussions/       # listDiscussions, postEntry, bulkGradeDiscussion
+│           └── grading/           # bulkGrade, gradeWithRubric (form-encoded rubric_assessment[])
 │
-├── src/
-│   └── canvas_mcp/                  # Main Python package
-│       ├── __init__.py              # Package init, version (1.0.6), entry point
-│       ├── server.py                # * MCP server entry point, tool registration
-│       │
-│       ├── core/                    # Core utilities layer
-│       │   ├── __init__.py          # Barrel exports (27 functions/classes)
-│       │   ├── config.py            # * Config singleton (20+ env vars)
-│       │   ├── client.py            # * HTTP client, retry, pagination, anonymization
-│       │   ├── cache.py             # Bidirectional course code/ID cache
-│       │   ├── validation.py        # Parameter validation decorator
-│       │   ├── types.py             # TypedDict definitions (Course, Assignment, Page, Announcement)
-│       │   ├── dates.py             # Date parsing, smart formatting (compact/relative)
-│       │   ├── logging.py           # Structured logging with context
-│       │   ├── anonymization.py     # * FERPA anonymization (SHA256-based IDs)
-│       │   ├── response_formatter.py # Token-efficient formatting (COMPACT/STANDARD/VERBOSE)
-│       │   ├── peer_reviews.py      # * Peer review analytics engine
-│       │   └── peer_review_comments.py # * Comment quality analysis
-│       │
-│       ├── tools/                   # MCP tool implementations (23 modules)
-│       │   ├── __init__.py          # Tool registration orchestrator
-│       │   ├── courses.py           # Course listing, details, content overview
-│       │   ├── assignments.py       # * Assignment CRUD, submissions, grading
-│       │   ├── discussions.py       # Discussion topics, entries, replies
-│       │   ├── rubrics.py           # * Rubric CRUD, association, grading
-│       │   ├── student_tools.py     # Student-specific tools (grades, deadlines, TODO)
-│       │   ├── messaging.py         # * Conversations, bulk messaging, reminders
-│       │   ├── analytics.py         # * Student/course/assignment analytics
-│       │   ├── enrollment.py        # User enrollment, group management
-│       │   ├── modules.py           # Module CRUD, items management
-│       │   ├── pages.py             # Page CRUD, bulk updates
-│       │   ├── quizzes.py           # Quiz CRUD, questions, statistics
-│       │   ├── peer_reviews.py      # Peer review tracking, assignments
-│       │   ├── peer_review_comments.py # Comment extraction, quality analysis
-│       │   ├── gradebook.py         # Grade export, assignment groups, late policy
-│       │   ├── discussion_analytics.py # Discussion participation analytics
-│       │   ├── discovery.py         # Code API tool discovery
-│       │   ├── code_execution.py    # * TypeScript execution with sandboxing
-│       │   ├── accessibility.py     # UDOIT accessibility scanning
-│       │   ├── message_templates.py # Message template rendering
-│       │   ├── other_tools.py       # Conversation management, unread counts
-│       │   ├── search_helpers.py    # Fuzzy search for assignments/students/discussions
-│       │   └── content_migrations.py # Course content copy operations
-│       │
-│       ├── resources/               # MCP resources and prompts
-│       │   ├── __init__.py          # Barrel export
-│       │   └── resources.py         # Course syllabus, assignment desc, code API files
-│       │
-│       └── code_api/                # TypeScript code execution API
-│           ├── client.ts            # * HTTP client with retry, pagination
-│           ├── index.ts             # Main entry, re-exports
-│           └── canvas/
-│               ├── index.ts         # Module re-exports
-│               ├── assignments/
-│               │   ├── index.ts
-│               │   └── listSubmissions.ts  # Paginated submission fetching
-│               ├── grading/
-│               │   ├── index.ts
-│               │   ├── bulkGrade.ts        # * Concurrent bulk grading
-│               │   └── gradeWithRubric.ts  # Rubric-based grading
-│               ├── discussions/
-│               │   ├── index.ts
-│               │   ├── listDiscussions.ts  # Discussion topic listing
-│               │   ├── postEntry.ts        # Post to discussions
-│               │   └── bulkGradeDiscussion.ts # * Discussion participation grading
-│               ├── courses/
-│               │   ├── index.ts
-│               │   ├── listCourses.ts      # Course listing
-│               │   └── getCourseDetails.ts # Course detail fetching
-│               └── communications/
-│                   ├── index.ts
-│                   └── sendMessage.ts      # Canvas inbox messaging
+├── tests/                         # ▶ Test suite — 23 files, 328 test functions
+│   ├── conftest.py                # Shared fixtures: mock_canvas_request, mock_fetch_paginated, mock_course_id_resolver, sample data
+│   ├── test_analytics.py          # 11 tests — stats, aggregation, missing-submission detection
+│   ├── test_dates.py              # 16 tests — parse/format, relative-time edge cases (negative deltas)
+│   ├── test_token_efficiency.py   # 11 tests — compact vs verbose token savings (~4 char/token heuristic)
+│   ├── tools/                     # Per-tool-module unit tests (14 files, 216 tests)
+│   │   ├── test_assignments.py    # 35 tests
+│   │   ├── test_courses.py        # 7 tests
+│   │   ├── test_discussion_analytics.py  # 12 tests
+│   │   ├── test_discussions.py    # 5 tests
+│   │   ├── test_gradebook.py      # 13 tests
+│   │   ├── test_grading_export.py # 33 tests (new module has robust coverage)
+│   │   ├── test_messaging.py      # 7 tests
+│   │   ├── test_modules.py        # 36 tests — reference impl for TDD patterns
+│   │   ├── test_pages.py          # 15 tests
+│   │   ├── test_peer_reviews.py   # 5 tests
+│   │   ├── test_quizzes.py        # 14 tests
+│   │   ├── test_rubrics.py        # 17 tests
+│   │   ├── test_search_helpers.py # 13 tests
+│   │   └── test_student_tools.py  # 5 tests
+│   └── security/                  # FERPA + security tests (5 files, 73 tests)
+│       ├── test_authentication.py # 13 tests — token exposure prevention
+│       ├── test_code_execution.py # 16 tests — sandbox security (most @skip, not fully implemented)
+│       ├── test_dependencies.py   # 13 tests — pip-audit CVE scan
+│       ├── test_ferpa_compliance.py  # 14 tests — PII anonymization w/ env flag
+│       └── test_input_validation.py  # 17 tests — type checks, SQL injection, boundary values
 │
-├── tests/                           # Test suite (~4,800 lines)
-│   ├── conftest.py                  # * Shared fixtures (mocks, sample data)
-│   ├── test_analytics.py            # Analytics tool tests (16 tests)
-│   ├── test_dates.py                # Date formatting tests (17 tests)
-│   ├── test_token_efficiency.py     # Token savings verification (12 tests)
-│   ├── tools/                       # Tool-specific tests
-│   │   ├── test_assignments.py
-│   │   ├── test_courses.py
-│   │   ├── test_discussions.py
-│   │   ├── test_discussion_analytics.py
-│   │   ├── test_gradebook.py
-│   │   ├── test_messaging.py
-│   │   ├── test_modules.py
-│   │   ├── test_pages.py
-│   │   ├── test_peer_reviews.py
-│   │   ├── test_quizzes.py
-│   │   ├── test_rubrics.py
-│   │   ├── test_search_helpers.py
-│   │   └── test_student_tools.py
-│   └── security/                    # Security tests
-│       ├── test_authentication.py
-│       ├── test_code_execution.py
-│       ├── test_dependencies.py
-│       ├── test_ferpa_compliance.py
-│       └── test_input_validation.py
+├── tools/                         # ⚠ Documentation ONLY (not runtime code — confusingly named)
+│   ├── README.md                  # Human-facing full tool reference (~100+ tools documented)
+│   └── TOOL_MANIFEST.json         # Machine-readable tool catalog for programmatic use
 │
-├── tools/                           # External tool documentation
-│   ├── README.md                    # Comprehensive tool reference
-│   └── TOOL_MANIFEST.json           # Machine-readable tool catalog
-│
-├── examples/                        # Usage examples
-│   ├── educator_quickstart.md
-│   ├── student_quickstart.md
+├── examples/                      # Workflow tutorials (human-authored)
 │   ├── bulk_grading_example.md
 │   ├── common_issues.md
-│   └── real_world_workflows.md
+│   ├── educator_quickstart.md
+│   ├── real_world_workflows.md
+│   └── student_quickstart.md
+│
+├── docs/                          # ▶ Documentation root (this file lives here)
+│   ├── index.md                   # Master AI-retrieval entry point (regenerated)
+│   ├── project-overview.md        # Executive summary + tech stack (regenerated)
+│   ├── architecture.md            # Full architecture walkthrough (regenerated)
+│   ├── source-tree-analysis.md    # This file (regenerated)
+│   ├── api-contracts.md           # Every MCP tool catalogued (regenerated)
+│   ├── development-guide.md       # Setup, testing, contributing (regenerated)
+│   ├── deployment-guide.md        # Docker, PyPI, MCP Registry (regenerated)
+│   ├── CLAUDE.md                  # Developer-focused guide (codebase conventions) — preserved
+│   ├── EDUCATOR_GUIDE.md          # End-user guide (educator persona) — preserved
+│   ├── STUDENT_GUIDE.md           # End-user guide (student persona) — preserved
+│   ├── best-practices.md          # Operational guidance — preserved
+│   ├── course_documentation_prompt_template.md — preserved
+│   ├── project-scan-report.json   # BMAD workflow state file (this scan)
+│   ├── .archive/                  # Prior state files (2026-03-12)
+│   └── index.html, *.html, styles.css, CNAME  # GitHub Pages site (preserved)
 │
 ├── config/
-│   └── overlays/                    # Deployment tier configs
-│       ├── baseline.env             # Base security settings
-│       ├── public.env               # Public deployment hardening
-│       └── enterprise.env           # Enterprise with audit logging
+│   └── overlays/                  # Layered env config
+│       ├── baseline.env           # Safe defaults
+│       ├── enterprise.env         # Enterprise deployment
+│       ├── public.env             # Public-instance defaults
+│       └── README.md
 │
-├── docs/                            # Documentation and GitHub Pages
-│   ├── CLAUDE.md                    # Developer architecture reference
-│   ├── EDUCATOR_GUIDE.md            # Educator setup and usage
-│   ├── STUDENT_GUIDE.md             # Student setup and usage
-│   ├── best-practices.md            # Development workflow practices
-│   ├── course_documentation_prompt_template.md
-│   ├── index.html                   # GitHub Pages site
-│   ├── styles.css                   # GitHub Pages styles
-│   ├── educator-guide.html          # GitHub Pages
-│   ├── student-guide.html           # GitHub Pages
-│   ├── bulk-grading.html            # GitHub Pages
-│   └── CNAME                        # GitHub Pages custom domain
+├── .github/workflows/             # CI/CD (9 workflows) — all Python 3.12
+│   ├── canvas-mcp-testing.yml     # Pytest on push/PR to main + development (path-scoped to discussions.py + tests/)
+│   ├── security-testing.yml       # Weekly cron + PR — runs tests/security/ with coverage
+│   ├── publish-mcp.yml            # On tag v* — PyPI publish + MCP Registry push
+│   ├── auto-update-docs.yml       # On PR touching src/canvas_mcp/tools/** or server.py — Claude auto-updates docs
+│   ├── auto-claude-review.yml     # Auto-triggers Claude PR review on open
+│   ├── claude-code-review.yml     # Claude code review action
+│   ├── claude.yml                 # @claude mention handler (issues + PRs)
+│   ├── auto-label-issues.yml      # Claude triages + labels new issues
+│   └── weekly-maintenance.yml     # Sunday 00:00 UTC cron — maintenance jobs
 │
-├── .github/workflows/               # CI/CD pipelines
-│   ├── publish-mcp.yml              # * PyPI + MCP Registry publishing
-│   ├── security-testing.yml         # * 6-job security pipeline
-│   ├── canvas-mcp-testing.yml       # Test automation
-│   ├── auto-update-docs.yml         # Doc auto-updates
-│   ├── claude-code-review.yml       # AI code review
-│   └── weekly-maintenance.yml       # Scheduled maintenance
+├── archive/                       # Legacy code (git-tracked but outside runtime)
+│   └── canvas_server_cached.py    # Previous-generation server impl (reference only)
 │
-└── archive/                         # Legacy monolithic implementation
+├── Dockerfile                     # python:3.12-slim + uv + non-root mcp user + HEALTHCHECK
+├── .dockerignore                  # Excludes dev noise from image
+├── pyproject.toml                 # Python package config (hatchling build, fastmcp ≥2.14.0, httpx, pydantic ≥2.12)
+├── uv.lock                        # uv dependency lockfile
+├── package.json                   # TS submodule: canvas-mcp-code-api@1.0.6 (node-fetch, ts-node, tsx)
+├── package-lock.json              # npm lockfile
+├── tsconfig.json                  # TS config — rootDir: src/canvas_mcp/code_api, outDir: dist
+├── server.json                    # MCP Registry metadata (stdio transport, env var schema)
+├── start_canvas_server.sh         # Legacy startup wrapper (prefers .venv; loads .env)
+├── env.template                   # .env scaffold with all ~22 env vars documented
+├── README.md                      # Primary human entry point (installation, overview)
+├── AGENTS.md                      # AI-agent-facing guide (tool tables, constraints, workflows)
+├── SECURITY.md                    # Security policy
+├── SECURITY_IMPLEMENTATION_GUIDE.md  # Security controls documentation
+├── PROJECT_COMPLETION_SUMMARY.md  # Release-level summary
+├── COMPREHENSIVE_CRITIQUE.md      # Internal critique/retrospective
+├── CNAME                          # GitHub Pages domain
+└── LICENSE                        # MIT
 ```
 
-**Legend:** `*` = Critical file for understanding architecture
+---
 
-## Critical Folders
+## Critical Directories
 
-| Directory | Purpose | Files |
-|-----------|---------|-------|
-| `src/canvas_mcp/core/` | Core utilities, HTTP client, config, privacy | 11 files |
-| `src/canvas_mcp/tools/` | MCP tool implementations (100+ tools) | 23 files |
-| `src/canvas_mcp/code_api/` | TypeScript bulk operation API | 17 files |
-| `tests/` | Test suite with tool + security coverage | 21 files |
-| `.github/workflows/` | CI/CD automation | 6+ workflows |
-| `config/overlays/` | Deployment tier configurations | 3 files |
+| Directory | Purpose | Entry Points |
+|-----------|---------|--------------|
+| `src/canvas_mcp/` | Python package | `server.py::main()` (CLI: `canvas-mcp-server`) |
+| `src/canvas_mcp/core/` | Shared infra: HTTP client, config, cache, validation, formatting, FERPA anonymization | `client.make_canvas_request`, `cache.get_course_id`, `validation.validate_params` |
+| `src/canvas_mcp/tools/` | All MCP tool modules (23) — every file exports `register_*_tools(mcp)` | `server.register_all_tools()` calls each in sequence |
+| `src/canvas_mcp/resources/` | MCP resources + prompts | `resources.register_resources_and_prompts(mcp)` |
+| `src/canvas_mcp/code_api/` | TypeScript bulk-operation submodule — used by `tools/code_execution.py` | `index.ts` (barrel) |
+| `tests/` | pytest + pytest-asyncio; heavy AsyncMock use at client boundary | `conftest.py` fixtures |
+| `.github/workflows/` | CI/CD pipelines (Python 3.12, uv) | `publish-mcp.yml` releases on `v*` tags |
+| `config/overlays/` | Environment preset files | loaded manually via shell |
 
-## Entry Points
+---
 
-| Entry Point | Path | Purpose |
-|------------|------|---------|
-| CLI | `canvas-mcp-server` (via pyproject.toml scripts) | Primary entry, starts MCP server |
-| Python | `src/canvas_mcp/__init__.py:main()` | Package entry point |
-| Server | `src/canvas_mcp/server.py:main()` | Server creation, tool registration, CLI args |
-| Docker | `Dockerfile` → `canvas-mcp-server` | Container entrypoint |
-| Shell | `start_canvas_server.sh` | Manual startup with env loading |
+## Key Files to Know
 
-## File Statistics
+| File | Why it matters |
+|------|----------------|
+| `src/canvas_mcp/server.py` | Server bootstrap — read first to understand tool registration order + user_type conditional logic |
+| `src/canvas_mcp/core/client.py` | Every Canvas API call routes through `make_canvas_request` — rate-limit retry, anonymization decision matrix |
+| `src/canvas_mcp/core/config.py` | Single source of truth for env-var behavior (~22 knobs) |
+| `src/canvas_mcp/core/validation.py` | `@validate_params` powers ALL MCP tool input coercion (Union/Optional/JSON→list) |
+| `src/canvas_mcp/tools/__init__.py` | Aggregates `register_*_tools` exports; add new modules here + in `server.py` |
+| `src/canvas_mcp/tools/quizzes.py` | Largest tool module (13 tools) — good pattern reference |
+| `src/canvas_mcp/tools/discussions.py` | 11 tools; only module CI directly path-watches |
+| `docs/CLAUDE.md` | Developer conventions (TDD enforcement, tool doc source-of-truth hierarchy) |
+| `AGENTS.md` | Authoritative tool table for MCP clients — keep in sync when adding tools |
+| `tools/TOOL_MANIFEST.json` | Machine-readable tool catalog — kept in sync with AGENTS.md |
+| `pyproject.toml` | Python 3.12+ requirement, FastMCP ≥2.14.0, Pydantic v2.12+, ruff + black + mypy configured |
 
-| Category | Count | ~Lines |
-|----------|-------|--------|
-| Python source (core) | 11 | ~3,300 |
-| Python source (tools) | 23 | ~10,000+ |
-| Python source (resources) | 2 | ~180 |
-| Python source (server) | 2 | ~245 |
-| TypeScript source | 17 | ~1,500 |
-| Python tests | 21 | ~4,800 |
-| Config files | 8 | ~300 |
-| Documentation (md) | 15+ | ~5,000+ |
-| CI/CD workflows | 6+ | ~500+ |
-| **Total source** | **~55** | **~15,000+** |
+---
+
+## Tool Registration Order (from `server.py`)
+
+Always registered (20 modules):
+`course → assignment → assignment_analytics → discussion → discussion_analytics → enrollment → module → page → rubric → rubric_grading → peer_review → peer_review_comment → messaging → accessibility → analytics → search_helper → quiz → gradebook → grading_export → content_migration`
+
+Conditionally registered:
+- If `CANVAS_MCP_USER_TYPE` ∈ {`"all"`, `"student"`} → `student_tools` (5 tools)
+- If `CANVAS_MCP_USER_TYPE == "all"` → `discovery`, `code_execution` (3 tools combined)
+
+Final: `register_resources_and_prompts()` → 3 resources + 1 prompt.
+
+---
+
+## Tool Count Summary
+
+| Module | Tools | Module | Tools |
+|--------|-------|--------|-------|
+| accessibility | 4 | messaging | 8 |
+| analytics | 11 | modules | 8 |
+| assignment_analytics | 9 | pages | 8 |
+| assignments | 8 | peer_review_comments | 5 |
+| code_execution | 2 | peer_reviews | 4 |
+| content_migrations | 1 | quizzes | 13 |
+| courses | 3 | rubrics | 8 |
+| discovery | 1 | rubric_grading | 3 |
+| discussion_analytics | 3 | search_helpers | 3 |
+| discussions | 11 | student_tools | 5 |
+| enrollment | 5 | **Total** | **129 MCP tools** |
+| gradebook | 5 | Resources | **3** |
+| grading_export | 1 | Prompts | **1** |
+
+---
+
+## Excluded From Scan (not source code)
+
+`.venv/`, `.git/`, `node_modules/`, `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.qlty/`, `dist/`, `build/`, `coverage/`, `_bmad/`, `_bmad-output/`, `.agent*/`, `.cursor/`, `.gemini/`, `venv-textual-paint/`, `articles/`, `local_maps/`, `akeyless` binary, `.DS_Store`.

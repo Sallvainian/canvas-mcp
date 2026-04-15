@@ -1,320 +1,439 @@
-# Canvas MCP - Architecture Document
+# Architecture
 
-**Generated:** 2026-03-12 | **Scan Level:** Exhaustive
+**Project:** canvas-mcp · **Version:** 1.0.6
+**Generated:** 2026-04-14 (full rescan, exhaustive)
 
 ---
 
-## 1. Architecture Overview
+## 1. Executive Summary
 
-Canvas MCP follows a **layered modular architecture** with conditional tool registration. The server acts as a bridge between MCP clients (Claude Desktop, Cursor, etc.) and the Canvas LMS REST API.
+Canvas MCP is a **Model Context Protocol (MCP) server** that exposes the Canvas LMS REST API to AI clients (Claude Desktop, Cursor, Zed, etc.) as typed, role-gated tools. It is a **Python 3.12+ monolith** built on the **FastMCP** framework, with a tightly-coupled **TypeScript sub-module** for token-efficient bulk operations.
 
-```
-MCP Client (Claude/Cursor/Zed)
-    │ (stdio transport)
-    ▼
-┌─────────────────────────────────┐
-│         FastMCP Server          │  server.py
-│   (tool registration, lifecycle)│
-├─────────────────────────────────┤
-│      Tool Layer (23 modules)    │  tools/*.py
-│  ┌───────┬──────────┬─────────┐ │
-│  │Student│ Educator │ Shared  │ │  Conditional registration
-│  │(5)    │ (40+)    │ (17+)   │ │  based on user_type
-│  └───────┴──────────┴─────────┘ │
-├─────────────────────────────────┤
-│      Core Utilities Layer       │  core/*.py
-│  ┌──────┬───────┬──────┬──────┐ │
-│  │Config│Client │Cache │Valid.│ │
-│  │      │(httpx)│      │      │ │
-│  ├──────┼───────┼──────┼──────┤ │
-│  │Dates │Format │Anon. │Types │ │
-│  └──────┴───────┴──────┴──────┘ │
-├─────────────────────────────────┤
-│    Privacy Layer (optional)     │  core/anonymization.py
-│  SHA256 ID mapping, PII removal │
-├─────────────────────────────────┤
-│    Code Execution (optional)    │  code_api/*.ts
-│  TypeScript bulk ops + sandbox  │
-└─────────────────────────────────┘
-         │
-         ▼ (HTTPS + Bearer token)
-    Canvas LMS REST API
-```
+The server emphasizes four operating concerns:
 
-## 2. Component Architecture
+1. **Role-gated surface area** — `CANVAS_MCP_USER_TYPE` (`all` / `educator` / `student`) controls which of the 129 MCP tools the process registers.
+2. **FERPA-compliant privacy** — Student PII can be anonymized via a global hash-based ID scheme at the HTTP response boundary.
+3. **Token economy** — All responses pass through a verbosity-aware formatter (`COMPACT` / `STANDARD` / `VERBOSE`) with pipe-delimited compact output and abbreviated field labels. Bulk operations execute in a TypeScript sandbox so large datasets never enter the LLM context.
+4. **Type-coerced inputs** — Every MCP tool wraps through a single `@validate_params` decorator that handles `Union`, `Optional`, JSON-string → list, and comma-separated strings.
 
-### 2.1 Server Entry Point (`server.py`, 229 lines)
+---
 
-The server orchestrates startup, tool registration, and lifecycle management.
-
-**Key responsibilities:**
-- Creates `FastMCP` instance with configurable server name
-- Registers tools conditionally based on `CANVAS_MCP_USER_TYPE` (educator/student/all)
-- Handles CLI arguments (`--test`, `--config`)
-- Manages graceful shutdown with HTTP client cleanup
-
-**Tool registration flow:**
-```python
-def register_all_tools(mcp):
-    # Always registered (shared tools)
-    register_course_tools(mcp)
-    register_discussion_tools(mcp)
-    register_page_tools(mcp)
-    register_module_tools(mcp)
-    register_other_tools(mcp)
-    register_search_helpers(mcp)
-
-    # Educator-only tools
-    if user_type != "student":
-        register_assignment_tools(mcp)
-        register_rubric_tools(mcp)
-        register_analytics_tools(mcp)
-        register_messaging_tools(mcp)
-        register_enrollment_tools(mcp)
-        register_peer_review_tools(mcp)
-        register_gradebook_tools(mcp)
-        register_quiz_tools(mcp)
-        register_accessibility_tools(mcp)
-        register_content_migration_tools(mcp)
-
-    # Student-only tools
-    if user_type != "educator":
-        register_student_tools(mcp)
-
-    # Developer tools
-    register_discovery_tools(mcp)
-    register_code_execution_tools(mcp)
-```
-
-### 2.2 Configuration System (`core/config.py`, 171 lines)
-
-**Pattern:** Singleton with lazy initialization
-
-```python
-_config_instance = None
-
-def get_config():
-    global _config_instance
-    if _config_instance is None:
-        _config_instance = Config()
-    return _config_instance
-```
-
-**Configuration categories:**
-| Category | Variables | Examples |
-|----------|----------|---------|
-| Required | 2 | `CANVAS_API_TOKEN`, `CANVAS_API_URL` |
-| Server | 4 | `MCP_SERVER_NAME`, `DEBUG`, `API_TIMEOUT`, `CACHE_TTL` |
-| Privacy | 2 | `ENABLE_DATA_ANONYMIZATION`, `ANONYMIZATION_DEBUG` |
-| Sandbox | 10 | `ENABLE_TS_SANDBOX`, `TS_SANDBOX_MODE`, limits |
-| Display | 2 | `CANVAS_MCP_VERBOSITY`, `CANVAS_MCP_USER_TYPE` |
-| Metadata | 2 | `INSTITUTION_NAME`, `TIMEZONE` |
-
-### 2.3 HTTP Client (`core/client.py`, 435 lines)
-
-The central HTTP communication layer with these features:
-
-**Rate limit handling:**
-- Exponential backoff (1s, 2s, 4s)
-- Respects `Retry-After` header from Canvas API
-- 3 retry attempts for 429/5xx errors
-- No retries on 4xx client errors
-
-**Pagination:**
-- `fetch_all_paginated_results()` collects all pages automatically
-- Configurable `per_page` parameter (default varies by endpoint)
-- Follows Canvas `Link` header pagination
-
-**Anonymization integration:**
-- Endpoint-based routing determines if anonymization applies
-- Applies to: user data, discussions, submissions, assignments
-- Transparent to tool layer - anonymization happens at HTTP response level
-
-**File upload:**
-- 3-step Canvas file upload (request slot, upload to S3, confirm)
-- Multipart form data support
-- S3 redirect handling
-
-**Progress polling:**
-- `poll_canvas_progress()` for async Canvas operations
-- Adaptive interval: 1s initial, grows to 5s max
-- Configurable timeout
-
-### 2.4 Validation System (`core/validation.py`, 220 lines)
-
-**Pattern:** Decorator-based parameter validation
-
-```python
-@validate_params
-async def my_tool(course_id: str, limit: int = 10, include_users: bool = False):
-    ...
-```
-
-The `@validate_params` decorator:
-1. Introspects type hints via `get_type_hints()`
-2. Validates and coerces each parameter (str, int, float, bool, list, dict, Union, Optional)
-3. Handles JSON string parsing for complex types
-4. Returns standardized error responses for invalid input
-
-### 2.5 Response Formatting (`core/response_formatter.py`, 460 lines)
-
-Three verbosity levels for token efficiency:
-
-| Level | Style | Token Savings | Example |
-|-------|-------|--------------|---------|
-| COMPACT | Pipe-delimited, 1-letter bools | ~70% | `HW1\|100pts\|Y\|Jan 21` |
-| STANDARD | Label: Value | ~30% | `Due: Jan 21, Points: 100` |
-| VERBOSE | Full labels | 0% | `Due Date: 2026-01-21T23:59:00Z` |
-
-### 2.6 Anonymization System (`core/anonymization.py`, 297 lines)
-
-**FERPA compliance via source-level anonymization:**
+## 2. Architecture Diagram
 
 ```
-Real Data → SHA256 Hash → Student_XXXXXXXX
-"Jane Doe" → hash("user_12345") → "Student_a7b3c2d1"
+┌─────────────────────────────────────────────────────────────────┐
+│                      MCP Client                                  │
+│            (Claude Desktop, Cursor, Zed, etc.)                   │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │ stdio transport (JSON-RPC)
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│           FastMCP Server — server.py                             │
+│   create_server() → register_all_tools() → register_resources()  │
+└──────┬─────────────────────────────────────────┬─────────────────┘
+       │                                         │
+       ▼                                         ▼
+┌──────────────────────┐              ┌─────────────────────────┐
+│ Tool Layer (23 files)│              │ Resources + Prompts     │
+│  tools/*.py          │              │  resources/resources.py │
+│  129 @mcp.tool defs  │              │  3 resources            │
+│  + register_* funcs  │              │  1 prompt               │
+│                      │              │  (course-syllabus,      │
+│  Conditional by      │              │   assignment-descr,     │
+│  user_type:          │              │   code-api-file,        │
+│   • all (129)        │              │   summarize-course)     │
+│   • educator (121)   │              └─────────────────────────┘
+│   • student (126)    │
+└─────┬────────────────┘
+      │ all tools use:
+      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              Core Utilities — core/*.py                          │
+│                                                                   │
+│  client.py      → make_canvas_request() is the SINGLE choke point │
+│  config.py      → Config singleton, ~22 env vars                  │
+│  cache.py       → course_code ↔ ID cache (lazy refresh on miss)   │
+│  validation.py  → @validate_params decorator (type coercion)      │
+│  anonymization.py → FERPA: hash-based anonymous_id + PII redaction│
+│  response_formatter.py → Verbosity (COMPACT/STANDARD/VERBOSE)     │
+│  dates.py       → ISO 8601 + smart (standard/compact/relative)    │
+│  logging.py     → Structured logger → stderr (name="canvas_mcp")  │
+│  peer_reviews.py / peer_review_comments.py → analytics classes    │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ httpx.AsyncClient (global, lazy)
+                           ▼
+                 ┌─────────────────────┐
+                 │   Canvas LMS API    │
+                 │  CANVAS_API_URL     │
+                 │  Bearer token auth  │
+                 └─────────────────────┘
+
+           ┌─────────────────────────────────────────────┐
+           │   TypeScript submodule (code_api/)          │
+           │  Invoked via tools/code_execution.py        │
+           │  Sandbox modes: auto | local | container    │
+           │                                              │
+           │  index.ts  → barrel export                   │
+           │  client.ts → Canvas HTTP, retry, pagination  │
+           │  canvas/courses/      listCourses            │
+           │  canvas/assignments/  listSubmissions        │
+           │  canvas/communications/ sendMessage          │
+           │  canvas/discussions/  bulkGradeDiscussion    │
+           │  canvas/grading/      bulkGrade, rubric      │
+           └─────────────────────────────────────────────┘
 ```
 
-- Consistent mapping: same real ID always produces same anonymous ID
-- Session-scoped cache for performance
-- PII removal from discussion text (email, phone, SSN patterns)
-- Preserves essential fields (Canvas IDs, timestamps, roles)
-- Educator-only feature (students access only their own data)
+---
 
-### 2.7 Peer Review Analytics (`core/peer_reviews.py` + `peer_review_comments.py`, ~1,168 lines)
+## 3. Technology Stack
 
-Sophisticated analytics engine for peer review management:
+### Python runtime (primary)
+| Category | Tech | Version | Why |
+|----------|------|---------|-----|
+| Language | Python | ≥3.12 | Modern type hints, PEP 604 unions |
+| MCP framework | FastMCP | ≥2.14.0 | Canvas MCP's only framework dependency |
+| HTTP client | httpx | ≥0.28.1 | Async, connection pooling, Link header support |
+| Fallback HTTP | requests | ≥2.32.0 | Used in start-up checks / scripts |
+| Validation | Pydantic | ≥2.12.0 | Declarative type schemas |
+| Config | python-dotenv | ≥1.0.0 | `.env` loading at package import |
+| Date handling | python-dateutil | ≥2.8.0 | Flexible human-friendly parsing |
+| Markdown → HTML | markdown | ≥3.7.0 | Assignment description conversion |
+| Build | hatchling | — | `pyproject.toml` → wheel |
+| Package manager | uv | — | Recommended for install/lock |
 
-- **Completion tracking:** Reviewer-to-reviewee mapping, completion rates
-- **Follow-up system:** Prioritized lists (urgent/medium/low) with recommended actions
-- **Comment quality scoring (0-5):** Word count, constructiveness, specificity, sentiment
-- **Problematic review detection:** Too short, generic, harsh language, copy-paste
-- **Report generation:** Markdown, CSV, JSON formats
+### Python dev tooling
+| Tool | Version | Purpose |
+|------|---------|---------|
+| pytest | ≥7.0.0 | Test runner |
+| pytest-asyncio | ≥0.21.0 | Async test support |
+| black | 26.3.1 | Formatter (line-length 88) |
+| ruff | ≥0.1.0 | Lint (E, W, F, I, B, C4, UP rulesets) |
+| mypy | ≥1.5.0 | Strict type-check (`disallow_untyped_defs`, etc.) |
 
-### 2.8 Code Execution API (`code_api/`, 17 TypeScript files)
+### TypeScript submodule (secondary)
+| Category | Tech | Version |
+|----------|------|---------|
+| Runtime | Node.js | ≥20 (image `node:20-alpine`) |
+| Language | TypeScript | ^5.3.3 |
+| HTTP | node-fetch | ^3.3.2 |
+| Exec | tsx, ts-node | ^4.20.6 / ^10.9.2 |
+| Target | ES2022 (ESM) | — |
 
-Parallel TypeScript runtime for token-efficient bulk operations:
+### Architecture pattern
+**Layered + registrar pattern** with a **single HTTP choke point**.
 
+- Presentation: MCP tools (`@mcp.tool()` decorated async functions)
+- Service: Core utility modules (`cache`, `client`, `anonymization`, `response_formatter`)
+- Integration: `core/client.py::make_canvas_request` is the only path to Canvas
+- Cross-cutting: `@validate_params` decorator + `get_config()` singleton + stderr logger
+
+---
+
+## 4. Component Details
+
+### 4.1 Server bootstrap (`server.py`)
+
+`main()` is the CLI entry point registered in `pyproject.toml` as the `canvas-mcp-server` script. Flow:
+
+1. `argparse` handles `--test` (connectivity check) and `--config` (print config, exit)
+2. `validate_config()` warns on missing URL suffix, invalid `TS_SANDBOX_MODE`, unimplemented knobs
+3. `create_server()` → `FastMCP(config.mcp_server_name)`
+4. `register_all_tools(mcp)` registers modules in a fixed order (see Section 6)
+5. `register_resources_and_prompts(mcp)` registers 3 resources + 1 prompt
+6. `mcp.run()` starts stdio transport; `finally` block calls `cleanup_http_client()`
+
+### 4.2 HTTP client (`core/client.py`)
+
+Single async function `make_canvas_request(method, endpoint, params, data, use_form_data, skip_anonymization)`:
+
+- **Lazy global `httpx.AsyncClient`** (never re-created except via `cleanup_http_client()`)
+- **429 retry with exponential backoff**: `MAX_RETRIES=3`, `INITIAL_BACKOFF_SECONDS=2`, honors `Retry-After`
+- **Form-encoding path** via `use_form_data=True` + `urlencode()` for duplicate-key arrays (Canvas requires `module[prerequisite_module_ids][]=X` syntax)
+- **Anonymization boundary**: decides based on endpoint:
+  - Always redacted: `/users`, `/submissions`, `/enrollments`, etc.
+  - Always pass-through: `/courses`, `/accounts`, `/terms` (without `/users`)
+  - Controlled globally by `ENABLE_DATA_ANONYMIZATION`
+- **Progress polling**: `poll_canvas_progress(url)` with 1.5× interval growth, capped at 5s, max 120s total
+- **Pagination**: `fetch_all_paginated_results(endpoint, params)` follows RFC 5988 Link headers, aggregates, **then applies anonymization once** (not per page)
+- **File upload**: `upload_file_multipart` handles the 3-step S3 redirect flow (Canvas → presigned URL → confirmation)
+
+### 4.3 Validation decorator (`core/validation.py`)
+
+`@validate_params` is applied to every MCP tool. It reads the function's type hints via `inspect.signature()` and runs `validate_parameter()` on each bound argument:
+
+- **Union types**: tries each type in declaration order, collects errors if all fail
+- **Optional[T]**: allows `None` or coerces to T
+- **bool**: accepts bool / case-insensitive string / int / float
+- **list**: accepts list / JSON array string / comma-separated string
+- **dict**: accepts dict / JSON object string
+- **Failure**: returns `{"error": "...", "details": "..."}` JSON dict (does not raise)
+
+### 4.4 Cache (`core/cache.py`)
+
+Two module-global dicts:
+- `course_code_to_id_cache: dict[str, str]` — e.g., `{"CS101": "12345"}`
+- `id_to_course_code_cache: dict[str, str]` — e.g., `{"12345": "CS101"}`
+
+`get_course_id(course_identifier)` accepts ID / code / `sis_course_id:...`; on cache miss it calls `refresh_course_cache()` which paginates `/courses` and populates both directions.
+
+### 4.5 Anonymization (`core/anonymization.py`)
+
+Hash-based consistent ID mapping:
+- `generate_anonymous_id(real_id, prefix="Student")` → `f"{prefix}_{sha256(real_id)[:8]}"` cached in `_anonymization_cache`
+- Type-dispatched: `anonymize_response_data(data, data_type="general")` routes to `anonymize_user_data` / `anonymize_discussion_entry` / `anonymize_submission_data` / `anonymize_assignment_data`
+- Regex PII redaction: email, phone, SSN inside free-text fields
+- **Real user IDs preserved** for functionality (needed for messaging); only names, emails, SIS IDs are redacted
+
+### 4.6 Response formatter (`core/response_formatter.py`)
+
+Global verbosity (`CANVAS_MCP_VERBOSITY`, default `"compact"`):
+- **COMPACT** — `"id|name|due|pts"` pipe-delimited, `Y`/`N` booleans, abbreviated labels (`Due`, `Pts`, `Sub`). Aimed at ~40–85% token reduction (verified by `tests/test_token_efficiency.py`)
+- **STANDARD** — `"Name: value, Due: ..."` single-line per item
+- **VERBOSE** — full labels with colons, multi-line, lists expanded
+
+### 4.7 Core analyzer classes
+
+`PeerReviewAnalyzer` (`core/peer_reviews.py`) and `PeerReviewCommentAnalyzer` (`core/peer_review_comments.py`) are stateful class wrappers around peer-review endpoints + comment-quality heuristics (word count, constructive/specific/generic/harsh keyword banks, statistics aggregation). Used by `tools/peer_reviews.py` and `tools/peer_review_comments.py`.
+
+---
+
+## 5. Data Architecture
+
+### 5.1 In-memory state
+
+| Name | Location | Purpose | Lifetime |
+|------|----------|---------|----------|
+| `_config` | `core/config.py` | Config singleton | Process |
+| `http_client` | `core/client.py` | `httpx.AsyncClient` | Process; closed at exit via `cleanup_http_client()` |
+| `course_code_to_id_cache` | `core/cache.py` | Course resolution | Process; lazy refresh on miss |
+| `id_to_course_code_cache` | `core/cache.py` | Reverse lookup | Process |
+| `_anonymization_cache` | `core/anonymization.py` | Hash map for consistent IDs | Process; `clear_anonymization_cache()` available |
+| `_verbosity` | `core/response_formatter.py` | Cached verbosity | First access |
+
+**No database.** All persistent data lives in Canvas.
+
+### 5.2 Canvas object shapes
+
+`core/types.py` defines four TypedDicts (all `total=False`):
+- `CourseInfo` — id, name, course_code, start_at, end_at, time_zone, default_view, is_public, blueprint
+- `AssignmentInfo` — id, name, due_at, points_possible, submission_types, published, locked_for_user
+- `PageInfo` — page_id, url, title, published, front_page, locked_for_user, last_edited_by, editing_roles
+- `AnnouncementInfo` — id, title, message, posted_at, delayed_post_at, lock_at, published, is_announcement
+
+Most tool responses return raw JSON-serialized strings, not typed objects.
+
+---
+
+## 6. Tool Layer
+
+### 6.1 Registration order (`server.py::register_all_tools`)
+
+Always registered (20 modules, 121 tools):
 ```
-Claude Context                    Local Execution
-─────────────                    ───────────────
-"Grade 90 submissions"    →      bulkGrade({
-(3.5K tokens)                      courseId: "60366",
-                                   assignmentId: "123",
-                                   gradingFunction: (sub) => {
-                                     // Process locally
-                                     return { points: 100 };
-                                   }
-                                 });
-                          ←      Summary: "90 graded, 0 failed"
+course → assignment → assignment_analytics → discussion → discussion_analytics
+  → enrollment → module → page → rubric → rubric_grading → peer_review
+  → peer_review_comment → messaging → accessibility → analytics
+  → search_helper → quiz → gradebook → grading_export → content_migration
 ```
 
-**Available operations:**
-| Module | Functions |
-|--------|-----------|
-| `grading/` | `bulkGrade`, `gradeWithRubric` |
-| `assignments/` | `listSubmissions` |
-| `discussions/` | `listDiscussions`, `postEntry`, `bulkGradeDiscussion` |
-| `courses/` | `listCourses`, `getCourseDetails` |
-| `communications/` | `sendMessage` |
+Conditionally:
+- If `user_type ∈ {"all", "student"}` → `student_tools` (+5 tools)
+- If `user_type == "all"` → `discovery`, `code_execution` (+3 tools)
 
-**Sandbox options:**
-- Default: Runs with local user permissions
-- Optional: Docker/Podman container isolation
-- Configurable: Timeout, memory, CPU limits, network allowlist
+Then `register_resources_and_prompts()` (+3 resources, +1 prompt).
 
-## 3. Data Flow
+### 6.2 Tool module catalogue
 
-### 3.1 Standard Tool Call Flow
+See [api-contracts.md](./api-contracts.md) for the complete signature-by-signature reference. Summary:
 
-```
-MCP Client → FastMCP Server → Tool Function → @validate_params
-    → Core Client (make_canvas_request)
-    → Rate Limit Check → HTTP Request → Canvas API
-    → Response → Anonymization (if enabled) → Response Formatter
-    → Tool Output → FastMCP → MCP Client
-```
+| Module | Tools | Primary Canvas endpoints |
+|--------|-------|--------------------------|
+| `accessibility.py` | 4 | `/courses/{id}/ufixit_summary` + content scan |
+| `analytics.py` | 11 | `/courses/{id}/analytics/*`, `/reports/*` |
+| `assignment_analytics.py` | 9 | `/assignments/{id}/submissions`, `/submission_history` |
+| `assignments.py` | 8 | `/courses/{id}/assignments`, `/grading_periods`, `/peer_reviews` |
+| `code_execution.py` | 2 | No Canvas calls — invokes TS submodule |
+| `content_migrations.py` | 1 | `/courses/{id}/content_migrations` |
+| `courses.py` | 3 | `/courses`, `/accounts/{id}/courses` |
+| `discovery.py` | 1 | TS submodule introspection |
+| `discussion_analytics.py` | 3 | `/discussion_topics/{id}/entries` |
+| `discussions.py` | 11 | `/discussion_topics`, `/entries`, `/replies`, `/announcements` |
+| `enrollment.py` | 5 | `/accounts/{id}/users`, `/enrollments`, `/groups` |
+| `gradebook.py` | 5 | `/assignment_groups`, `/students/submissions` |
+| `grading_export.py` | 1 | `/courses/{id}/assignments/{id}/submissions` (new per-assignment path; see commit `0307c55`) |
+| `messaging.py` | 8 | `POST /conversations` (form-encoded) |
+| `modules.py` | 8 | `/courses/{id}/modules`, `/modules/{id}/items` |
+| `pages.py` | 8 | `/courses/{id}/pages`, `/front_page` |
+| `peer_review_comments.py` | 5 | `/peer_reviews` + submission comments |
+| `peer_reviews.py` | 4 | `/peer_reviews` (wraps `PeerReviewAnalyzer`) |
+| `quizzes.py` | 13 | `/quizzes`, `/questions`, `/statistics`, `/submissions` |
+| `rubrics.py` | 8 | `/rubrics`, `/rubric_associations` |
+| `rubric_grading.py` | 3 | `/submissions/update_grades` (bulk) + rubric PUT fallback |
+| `search_helpers.py` | 3 | `/assignments`, `/users`, `/discussion_topics` (search+filter) |
+| `student_tools.py` | 5 | `/users/self/*` endpoints only |
 
-### 3.2 Bulk Operation Flow (Code Execution)
+### 6.3 Tool author conventions
 
-```
-MCP Client → execute_typescript tool
-    → Write TS code to temp file
-    → Spawn Node.js process (sandbox optional)
-    → TS code calls Canvas API directly via client.ts
-    → Local processing (no context cost)
-    → Return summary to MCP Client
-```
+From `docs/CLAUDE.md`:
+1. Every tool uses `@mcp.tool()` + `@validate_params`, declared async
+2. Course IDs accept `Union[str, int]` and resolve via `get_course_id()`
+3. Dates output via `format_date()` / `format_date_smart(mode=...)`
+4. Errors return JSON strings containing an `"error"` key (never raise)
+5. Canvas POST/PUT endpoints that require form data set `use_form_data=True`
+6. Privacy: real user IDs preserved; names anonymized via `anonymize_response_data()` decision matrix
+7. Optional parameters use `Optional[T]` (PEP 604 `T | None` equivalent)
+8. TDD enforced: ≥3 tests per new tool (success path, error path, edge case) — see `tests/tools/test_modules.py` as reference pattern
 
-### 3.3 Course ID Resolution Flow
+---
 
-```
-Input (any format) → get_course_id()
-    → Is numeric? → Return directly
-    → Check code_to_id cache → Return if found
-    → Refresh cache from API → Check again
-    → Try SIS format (sis_course_id:xxx) → Return if found
-    → Return original (may fail at API level)
-```
+## 7. TypeScript Submodule (`code_api/`)
 
-## 4. Security Architecture
+Purpose: run bulk operations locally in a sandbox to keep large datasets out of the LLM context.
 
-### 4.1 Authentication
-- Canvas API Bearer token stored in `.env` file
-- Token loaded at startup, validated before server starts
-- No MCP-level authentication (relies on local execution model)
+- **Entry:** `index.ts` barrel-re-exports every domain function
+- **Client:** `client.ts` provides `canvasGet/Post/Put/Delete/PutForm`, `fetchAllPaginated<T>`, 30-second timeout, retry (3× at 1/2/4s backoff), error surface with status + body
+- **Domain folders** under `canvas/`:
+  - `courses/` — `listCourses()`, `getCourseDetails(input)`
+  - `assignments/` — `listSubmissions(input)` (paginated)
+  - `communications/` — `sendMessage(input)`
+  - `discussions/` — `listDiscussions`, `postEntry`, `bulkGradeDiscussion` (local participation analysis with O(1) parent lookup, concurrent batched PUTs)
+  - `grading/` — `bulkGrade` (accepts a `(Submission) => GradeResult | null` callback, concurrent-limited execution, dry-run mode), `gradeWithRubric` (form-encoded `rubric_assessment[{criterion_id}][points]` etc.)
 
-### 4.2 Privacy Controls
-- Anonymization enabled per environment (`ENABLE_DATA_ANONYMIZATION`)
-- Applied at HTTP response level, transparent to tools
-- Local CSV mapping files for educator de-anonymization
+**Invocation from Python:** `tools/code_execution.py::execute_typescript` runs user-supplied TS code inside Node.js (`local` mode) or a container (`container` mode; `node:20-alpine` by default). Network is restricted via an injected allowlist guard; memory/CPU/timeout enforceable via container runtime.
 
-### 4.3 Code Execution Safety
-- Optional sandbox via Docker/Podman
-- Resource limits: timeout, memory, CPU seconds
-- Network allowlist for outbound connections
-- Temp file isolation with auto-cleanup
+**Token-efficiency example** (from submodule README): bulk-grading 90 submissions traditional-path = ~1.35M tokens; via `bulkGrade` = ~3.5K tokens (≈99.7% reduction).
 
-### 4.4 Input Validation
-- Type coercion and validation via `@validate_params` decorator
-- Path validation for file access (code API resources)
-- No SQL (Canvas is REST-only), XSS mitigated by Canvas platform
+---
 
-## 5. Testing Architecture
+## 8. Configuration
 
-| Test Category | Files | Tests | Focus |
-|--------------|-------|-------|-------|
-| Tool tests | 13 | ~100+ | MCP tool input/output, error handling |
-| Analytics tests | 1 | 16 | Analytics accuracy, edge cases |
-| Date tests | 1 | 17 | Date parsing, relative formatting |
-| Token efficiency | 1 | 12 | Verbosity savings verification |
-| Security tests | 5 | ~30+ | Auth, FERPA, injection, sandboxing |
+### 8.1 Environment variables
 
-**Test patterns:**
-- AsyncMock for Canvas API calls
-- Shared fixtures in `conftest.py` (sample data, mock resolvers)
-- `get_tool_function()` helper to extract registered tools from FastMCP
-- Success + error + edge case coverage per tool
+Loaded via `python-dotenv` at `core/config.py` import.
 
-## 6. Deployment Architecture
+**Required:**
+- `CANVAS_API_TOKEN` — Canvas personal access token (Account → Settings → New Access Token)
+- `CANVAS_API_URL` — Full API URL including `/api/v1` suffix (e.g., `https://canvas.example.edu/api/v1`)
 
-### Docker
-- Base: `python:3.12-slim`
-- Uses `uv` for fast dependency installation
-- Non-root user (`mcp`) for security
-- Health check: Python import verification
-- Requires `CANVAS_API_TOKEN` and `CANVAS_API_URL` at runtime
+**Core:**
+- `MCP_SERVER_NAME` (default `"canvas-api"`) — Transport identifier
+- `DEBUG` (default `false`), `LOG_LEVEL` (default `"INFO"`), `LOG_API_REQUESTS` (default `false`)
+- `API_TIMEOUT` (default `30`), `CACHE_TTL` (default `300`), `MAX_CONCURRENT_REQUESTS` (default `10`)
 
-### CI/CD (GitHub Actions)
-- **publish-mcp.yml:** Tag-triggered PyPI + MCP Registry publishing (OIDC)
-- **security-testing.yml:** 6-job pipeline (pytest, Bandit, Semgrep, pip-audit, TruffleHog, CodeQL)
-- **canvas-mcp-testing.yml:** PR/push test automation
-- **auto-update-docs.yml:** Documentation synchronization
-- **claude-code-review.yml:** AI-assisted code review
-- **weekly-maintenance.yml:** Scheduled dependency checks
+**Privacy:**
+- `ENABLE_DATA_ANONYMIZATION` (default `true` when set via env.template; default in code is also `true`)
+- `ANONYMIZATION_DEBUG` (default `false`)
 
-### Configuration Overlays
-Three tiers for progressive security hardening:
-- **baseline.env:** Sandbox enabled, localhost binding, log redaction
-- **public.env:** + Network blocking, token encryption hints
-- **enterprise.env:** + Client auth placeholders, audit logging, SIEM forwarding
+**Response shaping:**
+- `CANVAS_MCP_VERBOSITY` (`compact` | `standard` | `verbose`; default `compact`)
+- `CANVAS_MCP_USER_TYPE` (`all` | `educator` | `student`; default `all`)
+
+**TS sandbox:**
+- `ENABLE_TS_SANDBOX` (default `false`)
+- `TS_SANDBOX_MODE` (`auto` | `local` | `container`; default `auto`)
+- `TS_SANDBOX_BLOCK_OUTBOUND_NETWORK`, `TS_SANDBOX_ALLOWLIST_HOSTS`
+- `TS_SANDBOX_CPU_LIMIT`, `TS_SANDBOX_MEMORY_LIMIT_MB`, `TS_SANDBOX_TIMEOUT_SEC` (all `0` = unlimited/best-effort locally)
+- `TS_SANDBOX_CONTAINER_IMAGE` (default `node:20-alpine`)
+
+**Metadata:**
+- `INSTITUTION_NAME`, `TIMEZONE` (default `"UTC"`)
+
+### 8.2 Config overlays
+
+`config/overlays/{baseline,enterprise,public}.env` provide layered presets. Loaded manually via shell (`source config/overlays/enterprise.env`).
+
+---
+
+## 9. Testing Strategy
+
+- **Runner:** pytest + pytest-asyncio
+- **Fixture hub:** `tests/conftest.py` — mocks `canvas_mcp.core.client.make_canvas_request`, `fetch_all_paginated_results`, and `cache.get_course_id/get_course_code` with AsyncMock. Also provides sample Canvas JSON payloads for courses, assignments, submissions, pages, rubrics, discussions, announcements.
+- **Pattern:** mock the HTTP boundary; assert tool output shape and that the right endpoint/params were called.
+- **Reference implementation:** `tests/tools/test_modules.py` (36 tests) and `tests/tools/test_grading_export.py` (33 tests)
+- **Cross-cutting:**
+  - `test_token_efficiency.py` (11 tests) verifies compact/standard/verbose token-savings heuristic (~4 chars/token)
+  - `test_dates.py` (16 tests) covers relative-time edge cases including a specific timedelta-negative-delta bug
+  - `test_analytics.py` (11 tests) for statistics
+- **Security suite** (`tests/security/`, 73 tests):
+  - `test_authentication.py` — token exposure in logs/errors
+  - `test_input_validation.py` — type checks, SQL injection, boundary values
+  - `test_ferpa_compliance.py` — PII anonymization w/ env flag
+  - `test_code_execution.py` — sandbox isolation (most `@skip` — sandbox security is not fully implemented)
+  - `test_dependencies.py` — `pip-audit` CVE scan
+
+### Coverage gaps
+
+Tool modules **without** a matching `tests/tools/test_*.py` file:
+`accessibility`, `analytics`, `assignment_analytics`, `code_execution`, `content_migrations`, `discovery`, `enrollment`, `message_templates`, `peer_review_comments`, `rubric_grading`.
+
+Notable: `rubric_grading.py` (rubric-driven grading) and `code_execution.py` (TS sandbox entry) are both shipped features without dedicated test files. See GitHub issue #56 for the comprehensive coverage plan.
+
+---
+
+## 10. Deployment Architecture
+
+### 10.1 Runtime modes
+
+| Mode | Invocation | Target |
+|------|------------|--------|
+| CLI (console script) | `canvas-mcp-server` | Developers / local MCP clients |
+| Docker | `docker run -e CANVAS_API_TOKEN=... -e CANVAS_API_URL=... canvas-mcp` | Containerized deploy |
+| Legacy shell | `./start_canvas_server.sh` | Loads `.env` + prefers `.venv/bin/canvas-mcp-server` |
+
+### 10.2 Docker image
+
+`Dockerfile` (Python 3.12-slim):
+1. `RUN pip install uv`
+2. Copies `pyproject.toml`, `LICENSE`, `README.md`, `env.template`, `src/`
+3. `uv pip install --system --no-cache -e .`
+4. Creates non-root user `mcp` (uid/gid default), `chown -R mcp:mcp /app`
+5. Env defaults: `MCP_SERVER_NAME=canvas-mcp`, `ENABLE_DATA_ANONYMIZATION=false`, `ANONYMIZATION_DEBUG=false`
+6. `USER mcp`
+7. `HEALTHCHECK` runs `python -c "import canvas_mcp; print('OK')"` (interval 30s, 3 retries)
+8. `CMD ["canvas-mcp-server"]`
+
+### 10.3 Distribution channels
+
+- **PyPI** — `canvas-mcp` package (published via `.github/workflows/publish-mcp.yml` on `v*` tags using `pypa/gh-action-pypi-publish`)
+- **MCP Registry** — server metadata at `server.json`; same workflow publishes to `https://static.modelcontextprotocol.io` with stdio transport entry
+- **GitHub Pages** — `docs/*.html` deployed at the `CNAME` domain
+
+---
+
+## 11. CI/CD Pipelines (`.github/workflows/`)
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `canvas-mcp-testing.yml` | `push`/PR to `main`,`development`; paths: `src/canvas_mcp/tools/discussions.py`, `tests/**` | Pytest smoke-runner on narrow scope |
+| `security-testing.yml` | push, PR, weekly Sunday cron | `pytest tests/security/ --cov=src/canvas_mcp` |
+| `publish-mcp.yml` | tag `v*` | PyPI publish → MCP Registry push |
+| `auto-update-docs.yml` | PR changing `src/canvas_mcp/tools/**` or `server.py` | Claude Action auto-updates docs |
+| `auto-claude-review.yml` | PR `opened` | Posts `@claude` review trigger comment |
+| `claude-code-review.yml` | PR events | Claude code review |
+| `claude.yml` | `@claude` mention in issue/PR comment | Claude Code action handler |
+| `auto-label-issues.yml` | `issues.opened` | Claude-powered triage + labeling |
+| `weekly-maintenance.yml` | Sunday 00:00 UTC cron + manual | Maintenance jobs (dependency checks, etc.) |
+
+All Python jobs use **Python 3.12**. Publishing uses `uv` for installs.
+
+---
+
+## 12. Security & Privacy Controls
+
+- **AuthN:** Bearer token via `CANVAS_API_TOKEN`; token validated at startup (`validate_config()`)
+- **AuthZ:** Role derived from Canvas token permissions + MCP-side gating via `CANVAS_MCP_USER_TYPE`
+- **FERPA:** Hash-based student-ID anonymization at HTTP response boundary (`anonymize_response_data()`); toggleable via `ENABLE_DATA_ANONYMIZATION`
+- **Token hygiene:** Logs go to stderr with `log_api_requests` disabled by default; tokens never enter log lines (`tests/security/test_authentication.py` verifies)
+- **TS sandbox:** `code_execution.py` supports network-allowlist, container isolation (`node:20-alpine`), CPU/memory/timeout limits; image can be validated by SHA256
+- **Input validation:** `@validate_params` rejects wrong types at the tool boundary; `tests/security/test_input_validation.py` covers SQL-injection strings, boundary integers, extreme values
+- **Dependency scanning:** weekly `pip-audit` (`test_dependencies.py`)
+
+---
+
+## 13. Known Limitations & Risks
+
+- **Sandbox isolation is partial** — many `tests/security/test_code_execution.py` cases are `@pytest.mark.skip`. Running untrusted TypeScript in `local` mode offers limited isolation; prefer `container` mode for untrusted code.
+- **`grading_export.py` has hardcoded course mapping** for a specific Science 8 course (period P1–P9 → Canvas course IDs). Reuse requires code changes.
+- **10 tool modules lack unit tests** (see §9). Tracked in issue #56.
+- **Cache has no TTL** in code — `CACHE_TTL` env var exists but `cache.py` uses lazy-on-miss; a long-running server might hold a stale code→ID map if a course is renamed.
+- **Global state** — `http_client`, `_config`, `_anonymization_cache`, caches — is safe within a stdio transport's single-process model; would need rework for multi-client HTTP transport.

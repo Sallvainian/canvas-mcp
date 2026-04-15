@@ -1,1 +1,54 @@
-{"workflow_version":"1.2.0","timestamps":{"started":"2026-03-12T14:00:00Z","last_updated":"2026-03-12T14:35:00Z","completed":"2026-03-12T14:35:00Z"},"mode":"initial_scan","scan_level":"exhaustive","project_root":"/Users/sallvain/Projects/canvas-mcp","project_knowledge":"/Users/sallvain/Projects/canvas-mcp/docs","project_types":[{"part_id":"main","project_type_id":"backend","display_name":"Canvas MCP Server"}],"completed_steps":[{"step":"step_0.5","status":"completed","timestamp":"2026-03-12T14:00:00Z","summary":"Loaded documentation requirements for 12 project types"},{"step":"step_1","status":"completed","timestamp":"2026-03-12T14:02:00Z","summary":"Classified as monolith with 1 part, project_type=backend, Python/FastMCP"},{"step":"step_2","status":"completed","timestamp":"2026-03-12T14:03:00Z","summary":"Found 12 existing docs, audited accuracy, deleted 6 misleading security docs"},{"step":"step_3","status":"completed","timestamp":"2026-03-12T14:05:00Z","summary":"Tech stack: Python 3.10+/FastMCP + TypeScript/Node.js, httpx, Pydantic"},{"step":"step_4","status":"completed","timestamp":"2026-03-12T14:20:00Z","summary":"Exhaustive scan: 4 parallel agents read all 76 source files. API contracts documented for 100+ tools across 23 modules"},{"step":"step_5","status":"completed","timestamp":"2026-03-12T14:25:00Z","summary":"Source tree documented with 55+ source files, 6 critical folders"},{"step":"step_6","status":"completed","timestamp":"2026-03-12T14:27:00Z","summary":"Dev/deployment guides written covering setup, testing, Docker, 6 CI/CD workflows"},{"step":"step_8","status":"completed","timestamp":"2026-03-12T14:30:00Z","summary":"Architecture document written with layered design, component details, data flows"},{"step":"step_9","status":"completed","timestamp":"2026-03-12T14:32:00Z","summary":"All supporting docs written: project-overview, api-contracts, development-guide, deployment-guide"},{"step":"step_10","status":"completed","timestamp":"2026-03-12T14:34:00Z","summary":"Master index generated with links to all generated and existing docs"},{"step":"step_11","status":"completed","timestamp":"2026-03-12T14:35:00Z","summary":"Validation complete, no incomplete markers found"},{"step":"step_12","status":"completed","timestamp":"2026-03-12T14:35:00Z","summary":"Workflow complete"}],"current_step":"completed","findings":{"project_classification":"Monolith, 1 part, Python/FastMCP backend MCP server","technology_stack":"Python 3.10+ with FastMCP, httpx, Pydantic; TypeScript code execution API","scan_summary":"Exhaustive scan of 76 source files across 4 parallel agents","api_contracts":"100+ MCP tools documented across 23 modules","existing_docs":"6 accurate docs preserved, 6 misleading docs deleted"},"outputs_generated":["project-scan-report.json","project-overview.md","source-tree-analysis.md","architecture.md","api-contracts.md","development-guide.md","deployment-guide.md","index.md"],"resume_instructions":"Workflow complete. All documentation generated."}
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-04-14T19:55:00Z",
+    "last_updated": "2026-04-14T19:45:00Z",
+    "completed": "2026-04-14T19:45:00Z"
+  },
+  "mode": "full_rescan",
+  "scan_level": "exhaustive",
+  "project_root": "/Users/sallvain/Projects/canvas-mcp",
+  "project_knowledge": "/Users/sallvain/Projects/canvas-mcp/docs",
+  "project_types": [
+    {
+      "part_id": "main",
+      "project_type_id": "backend",
+      "display_name": "Canvas MCP Server"
+    }
+  ],
+  "completed_steps": [
+    {"step": "step_0.5", "status": "completed", "timestamp": "2026-04-14T19:55:00Z", "summary": "Loaded documentation-requirements.csv; backend row matched Python FastMCP server"},
+    {"step": "step_1", "status": "completed", "timestamp": "2026-04-14T20:00:00Z", "summary": "Classified as monolith, 1 part, project_type=backend, Python 3.12+/FastMCP + TypeScript code_api submodule"},
+    {"step": "step_2", "status": "completed", "timestamp": "2026-04-14T20:02:00Z", "summary": "Existing docs inventory: 7 generated (prior scan) + 5 preserved human-authored + HTML Pages site"},
+    {"step": "step_3", "status": "completed", "timestamp": "2026-04-14T20:05:00Z", "summary": "Tech stack: Python 3.12+ (bumped from 3.10+), FastMCP ≥2.14.0, httpx ≥0.28, Pydantic ≥2.12, + TypeScript 5.3 Node 20"},
+    {"step": "step_4", "status": "completed", "timestamp": "2026-04-14T20:25:00Z", "summary": "Exhaustive scan via 4 parallel Explore agents: 41 Python source files + 17 TypeScript files + 23 test files; catalogued 129 MCP tools + 3 resources + 1 prompt"},
+    {"step": "step_5", "status": "completed", "timestamp": "2026-04-14T20:30:00Z", "summary": "source-tree-analysis.md rewritten with 23 tool modules + code_api TS submodule + tests; accurate file names (removed stale other_tools.py reference)"},
+    {"step": "step_6", "status": "completed", "timestamp": "2026-04-14T20:28:00Z", "summary": "Dev + deployment info extracted: ~22 env vars from env.template, 9 CI workflows, Dockerfile python:3.12-slim + uv + non-root + HEALTHCHECK"},
+    {"step": "step_8", "status": "completed", "timestamp": "2026-04-14T20:35:00Z", "summary": "architecture.md rewritten: layered + registrar pattern, single HTTP choke point, component details, TS submodule integration, security controls, 13 sections"},
+    {"step": "step_9", "status": "completed", "timestamp": "2026-04-14T20:40:00Z", "summary": "Supporting docs rewritten: project-overview.md, api-contracts.md (all 129 tools catalogued), development-guide.md (TDD rules, common tasks), deployment-guide.md (PyPI/Docker/Registry flow)"},
+    {"step": "step_10", "status": "completed", "timestamp": "2026-04-14T20:42:00Z", "summary": "Master index.md generated with AI-retrieval-first structure, quick reference, getting started per persona, link to all generated + preserved docs"},
+    {"step": "step_11", "status": "completed", "timestamp": "2026-04-14T20:44:00Z", "summary": "Validation complete: no _(To be generated)_ or fuzzy incomplete markers found; all 7 generated files verified present and non-empty"},
+    {"step": "step_12", "status": "completed", "timestamp": "2026-04-14T20:45:00Z", "summary": "Workflow complete"}
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": "Monolith, 1 part, Python 3.12+/FastMCP backend MCP server with TypeScript bulk-op submodule",
+    "technology_stack": "Python 3.12+ (FastMCP ≥2.14.0, httpx, Pydantic v2.12+, dotenv, dateutil, markdown); TypeScript 5.3 (Node 20, node-fetch)",
+    "scan_summary": "Exhaustive scan via 4 parallel Explore agents covering 41 Python source + 17 TypeScript + 23 test files",
+    "api_contracts": "129 MCP tools across 23 modules; 3 resources; 1 prompt; 9 TS bulk-op exports",
+    "existing_docs": "7 generated docs regenerated; 5 human-authored docs preserved (CLAUDE, EDUCATOR_GUIDE, STUDENT_GUIDE, best-practices, course_doc_template); HTML GitHub Pages site preserved",
+    "changes_since_prior_scan": "Added grading_export.py tool + 33 tests; Python bumped to 3.12+; codebase cleanup removed all mypy/ruff errors and split oversized modules; black bumped to 26.3.1",
+    "coverage_gaps": "10 tool modules lack dedicated test files (accessibility, analytics, assignment_analytics, code_execution, content_migrations, discovery, enrollment, message_templates, peer_review_comments, rubric_grading)"
+  },
+  "outputs_generated": [
+    "project-scan-report.json",
+    "index.md",
+    "project-overview.md",
+    "source-tree-analysis.md",
+    "architecture.md",
+    "api-contracts.md",
+    "development-guide.md",
+    "deployment-guide.md"
+  ],
+  "resume_instructions": "Workflow complete. All documentation generated."
+}

@@ -623,14 +623,37 @@ def register_rubric_grading_tools(mcp: FastMCP) -> None:
                                 f"  Bulk grading completed! ({len(bulk_grades)} submissions)"
                             )
                         elif progress_result["workflow_state"] == "failed":
-                            stats["failed"] += len(bulk_grades)
                             result_lines.append(
                                 f"  Bulk grading FAILED: {progress_result.get('error', 'unknown')}"
                             )
+                            result_lines.append(
+                                "  Falling back to individual API calls..."
+                            )
                             for uid in bulk_grades:
-                                failed_results.append(
-                                    {"user_id": uid, "error": "Bulk operation failed"}
+                                individual_result = (
+                                    await _grade_single_submission_individual(
+                                        course_id,
+                                        assignment_id_str,
+                                        uid,
+                                        bulk_grades[uid],
+                                    )
                                 )
+                                if individual_result["status"] == "success":
+                                    stats["graded"] += 1
+                                    result_lines.append(
+                                        f"  [ok] User {uid}: {individual_result.get('message', 'Graded')}"
+                                    )
+                                else:
+                                    stats["failed"] += 1
+                                    failed_results.append(
+                                        {
+                                            "user_id": uid,
+                                            "error": individual_result["error"],
+                                        }
+                                    )
+                                    result_lines.append(
+                                        f"  [fail] User {uid}: {individual_result['error']}"
+                                    )
                         else:
                             # Timeout — operation still in progress
                             result_lines.append(

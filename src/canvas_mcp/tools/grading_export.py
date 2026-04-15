@@ -102,11 +102,14 @@ def _parse_grade_filter(grade_str: str) -> tuple[float, float]:
     return val, val
 
 
-async def _fetch_grading_period_id(course_id: int, period_name: str) -> int | None:
-    """Resolve a grading period name (e.g., 'Q3') to a Canvas grading period ID.
+async def _fetch_grading_period_dates(
+    course_id: int, period_name: str
+) -> tuple[str | None, str | None]:
+    """Resolve a grading period name (e.g., 'Q3') to start/end dates.
 
-    Uses case-insensitive substring matching against period titles.
-    Returns None if no match found.
+    Matches by substring OR by extracting the number from Q1-Q4 and matching
+    against 'Marking Period N'. Returns (start_date, end_date) ISO strings,
+    or (None, None) if no match found.
     """
     response = await make_canvas_request(
         "get", f"/courses/{course_id}/grading_periods", skip_anonymization=True
@@ -115,15 +118,24 @@ async def _fetch_grading_period_id(course_id: int, period_name: str) -> int | No
         log_warning(
             f"Could not fetch grading periods for course {course_id}: {response['error']}"
         )
-        return None
+        return None, None
 
     periods = response.get("grading_periods", []) if isinstance(response, dict) else []
     search = period_name.strip().lower()
+
+    # Extract number from Q1/Q2/Q3/Q4 format
+    period_num = None
+    if search.startswith("q") and len(search) == 2 and search[1].isdigit():
+        period_num = search[1]
+
     for p in periods:
         title = p.get("title", "").lower()
         if search in title:
-            return p.get("id")
-    return None
+            return p.get("start_date"), p.get("end_date")
+        if period_num and period_num in title and "marking period" in title:
+            return p.get("start_date"), p.get("end_date")
+
+    return None, None
 
 
 async def _fetch_course_data(
@@ -148,13 +160,14 @@ async def _fetch_course_data(
 ) -> list[dict[str, Any]]:
     """Fetch and filter all data for a single course. Returns list of assignment dicts."""
 
-    # --- Grading period resolution ---
-    grading_period_id = None
+    # --- Grading period resolution (to date range) ---
+    gp_start = None
+    gp_end = None
     if grading_period_filter:
-        grading_period_id = await _fetch_grading_period_id(
+        gp_start, gp_end = await _fetch_grading_period_dates(
             course_id, grading_period_filter
         )
-        if grading_period_id is None:
+        if gp_start is None:
             warnings.append(
                 f"Grading period '{grading_period_filter}' not found in course {period} ({course_id})"
             )
@@ -171,8 +184,6 @@ async def _fetch_course_data(
 
     # --- Assignments ---
     assignment_params: dict[str, Any] = {"per_page": 100}
-    if grading_period_id:
-        assignment_params["grading_period_id"] = grading_period_id
 
     assignments_resp = await fetch_all_paginated_results(
         f"/courses/{course_id}/assignments",
@@ -233,6 +244,21 @@ async def _fetch_course_data(
             assignments = filtered
         except (ValueError, IndexError):
             warnings.append(f"Invalid date_range format: {date_range_filter}")
+
+    if gp_start or gp_end:
+        gp_start_dt = parse_date(gp_start)
+        gp_end_dt = parse_date(gp_end)
+        filtered = []
+        for a in assignments:
+            due = parse_date(a.get("due_at"))
+            if due is None:
+                continue
+            if gp_start_dt and due < gp_start_dt:
+                continue
+            if gp_end_dt and due > gp_end_dt:
+                continue
+            filtered.append(a)
+        assignments = filtered
 
     if not assignments:
         return []
@@ -363,14 +389,13 @@ async def _fetch_course_data(
                 if workflow_state != submission_state_filter.strip().lower():
                     continue
 
-            if ungraded_only:
-                if not (
+            if ungraded_only or resubmissions_only:
+                is_ungraded = (
                     score is None and submitted_at_str is not None and not is_excused
-                ):
-                    continue
-
-            if resubmissions_only:
-                if not resubmitted:
+                )
+                matches_ungraded = ungraded_only and is_ungraded
+                matches_resubmitted = resubmissions_only and resubmitted
+                if not (matches_ungraded or matches_resubmitted):
                     continue
 
             if late_only:
@@ -473,8 +498,8 @@ def register_grading_export_tools(mcp: FastMCP) -> None:
             student: Student name (fuzzy match) or Canvas ID.
             gender: M or F. Cross-references anonymization map CSVs.
             submission_state: submitted, graded, unsubmitted, or pending_review.
-            ungraded_only: Only submissions awaiting grades.
-            resubmissions: Only submissions resubmitted after grading.
+            ungraded_only: Only submissions awaiting grades. When combined with `resubmissions`, the two behave as OR (a submission passes if it matches either bucket), since the buckets are disjoint by definition.
+            resubmissions: Only submissions resubmitted after grading. See `ungraded_only` for combined behavior.
             late_only: Only late submissions.
             date_range: Filter assignments by due date. Format: start_date,end_date (ISO 8601).
             grading_period: Q1, Q2, Q3, or Q4. Uses Canvas grading periods API.

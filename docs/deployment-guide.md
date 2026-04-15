@@ -1,220 +1,255 @@
-# Canvas MCP - Deployment Guide
+# Deployment Guide
 
-**Generated:** 2026-03-12 | **Scan Level:** Exhaustive
+**Project:** canvas-mcp · **Version:** 1.0.6
+**Generated:** 2026-04-14 (full rescan, exhaustive)
 
 ---
 
-## Deployment Models
+## Deployment Options
 
-Canvas MCP supports three deployment models:
+| Mode | Audience | Command |
+|------|----------|---------|
+| Local CLI (pip install) | End users with local MCP clients | `canvas-mcp-server` (after `pip install canvas-mcp`) |
+| Docker container | Server deployments, CI, shared hosts | `docker run -e CANVAS_API_TOKEN=… -e CANVAS_API_URL=… canvas-mcp` |
+| Legacy shell wrapper | Existing `.env`-based setups | `./start_canvas_server.sh` |
 
-| Model | Use Case | Startup |
-|-------|----------|---------|
-| **MCP Client Managed** | Standard use (Claude Desktop, Cursor, etc.) | Client starts server automatically |
-| **Manual/Script** | Development, testing | `canvas-mcp-server` or `start_canvas_server.sh` |
-| **Docker Container** | Isolated deployment, CI/CD | `docker run` with env vars |
+All three produce the same FastMCP process with stdio transport. Choose based on where the client that consumes it runs.
 
-## Local Deployment (Standard)
+---
 
-### Prerequisites
-- Python 3.10+ with virtualenv
-- Canvas API token and URL
+## PyPI Installation (End-user deploy)
 
-### Setup
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-cp env.template .env
-# Edit .env with CANVAS_API_TOKEN and CANVAS_API_URL
-```
-
-### MCP Client Configuration
-Point your MCP client to the virtualenv binary:
-```
-/absolute/path/to/canvas-mcp/.venv/bin/canvas-mcp-server
-```
-
-### Verification
-```bash
-canvas-mcp-server --test    # Test API connection
-canvas-mcp-server --config  # Display configuration
-```
-
-## Docker Deployment
-
-### Dockerfile Details
-
-```dockerfile
-FROM python:3.12-slim
-# Uses uv for fast installs
-# Creates non-root user "mcp"
-# Health check: python -c "import canvas_mcp; print('OK')"
-# Entrypoint: canvas-mcp-server
-```
-
-### Build and Run
+The package is published to PyPI as [`canvas-mcp`](https://pypi.org/project/canvas-mcp/).
 
 ```bash
-# Build image
-docker build -t canvas-mcp .
+# With uv (recommended)
+uv pip install canvas-mcp
 
-# Run with required env vars
-docker run -e CANVAS_API_TOKEN=your_token \
-           -e CANVAS_API_URL=https://your-institution.instructure.com \
-           canvas-mcp
-
-# Run with full configuration
-docker run \
-  -e CANVAS_API_TOKEN=your_token \
-  -e CANVAS_API_URL=https://your-institution.instructure.com \
-  -e ENABLE_DATA_ANONYMIZATION=true \
-  -e CANVAS_MCP_USER_TYPE=educator \
-  -e CANVAS_MCP_VERBOSITY=COMPACT \
-  canvas-mcp
+# With pip
+pip install canvas-mcp
 ```
 
-### Security Notes
-- Runs as non-root user (`mcp`)
-- No volume mounts needed for basic operation
-- Token passed via environment variable (not baked into image)
-- `ENABLE_DATA_ANONYMIZATION` defaults to `false` in container
+After install, `canvas-mcp-server` is on your PATH. Configure your MCP client to launch it (stdio transport).
 
-## CI/CD Pipeline
+### Example: Claude Desktop config
 
-### GitHub Actions Workflows
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or equivalent on Windows/Linux:
 
-#### 1. Publishing (`publish-mcp.yml`)
-**Trigger:** Git tags matching `v*`
-
-```
-Tag Push → Build & Test (Python 3.10, uv)
-    → pytest suite
-    → python -m build
-    → Publish to PyPI (OIDC, no tokens)
-    → Publish to MCP Registry (github-oidc)
-```
-
-**Dependencies:** PyPI Trusted Publisher configured for repository.
-
-#### 2. Security Testing (`security-testing.yml`)
-**Trigger:** Push to main/development, PRs to main, weekly (Sunday 00:00)
-
-6 parallel jobs:
-1. **Security Tests:** `pytest tests/security/` with coverage
-2. **SAST Scan:** Bandit + Semgrep analysis
-3. **Dependency Scan:** pip-audit + Safety check
-4. **Secret Detection:** detect-secrets + TruffleHog
-5. **CodeQL Analysis:** GitHub security-and-quality queries
-6. **Security Summary:** Aggregates all results
-
-#### 3. Test Automation (`canvas-mcp-testing.yml`)
-**Trigger:** Push to main/development (tools paths), PRs to main
-
-- Python 3.11, pytest with asyncio
-- Test report generation (markdown)
-- PR comment with results
-- Performance regression check (optional)
-
-#### 4. Other Workflows
-- **auto-update-docs.yml** - Documentation synchronization
-- **claude-code-review.yml** - AI-assisted code review
-- **auto-label-issues.yml** - Issue labeling automation
-- **weekly-maintenance.yml** - Scheduled dependency/maintenance checks
-
-### MCP Registry Publishing
-
-Server metadata in `server.json`:
 ```json
 {
-  "name": "io.github.vishalsachdev/canvas-mcp",
-  "version": "1.0.6",
-  "transport": "stdio",
-  "packageRegistry": {
-    "name": "pypi",
-    "packageName": "canvas-mcp"
+  "mcpServers": {
+    "canvas": {
+      "command": "canvas-mcp-server",
+      "env": {
+        "CANVAS_API_TOKEN": "<your token>",
+        "CANVAS_API_URL": "https://canvas.example.edu/api/v1",
+        "CANVAS_MCP_USER_TYPE": "educator"
+      }
+    }
   }
 }
 ```
 
-Validation: `jsonschema -i server.json /tmp/mcp-schema.json`
+---
 
-## Configuration Overlays
+## Docker Deployment
 
-Three deployment tiers in `config/overlays/`:
+### Image description
 
-### Baseline (`baseline.env`)
-- Sandbox enabled for code execution
-- MCP binds localhost only
-- Anonymization toggle preserved from user config
-- Log redaction enabled
+`Dockerfile` builds on `python:3.12-slim`:
 
-### Public (`public.env`)
-Baseline + additional hardening:
-- No outbound network from code execution
-- Token storage via keyring/envelope (placeholder)
-- Log rotation hints
+1. `pip install uv`
+2. Copies `pyproject.toml`, `LICENSE`, `README.md`, `env.template`, `src/`
+3. `uv pip install --system --no-cache -e .` (installs canvas-mcp in editable mode)
+4. Creates non-root user `mcp`, `chown -R mcp:mcp /app`
+5. Sets env defaults:
+   - `MCP_SERVER_NAME=canvas-mcp`
+   - `ENABLE_DATA_ANONYMIZATION=false`
+   - `ANONYMIZATION_DEBUG=false`
+6. `USER mcp`
+7. `HEALTHCHECK`: `python -c "import canvas_mcp; print('OK')"` every 30s, 3 retries
+8. `CMD ["canvas-mcp-server"]`
 
-### Enterprise (`enterprise.env`)
-Baseline + full enterprise controls:
-- Authenticated MCP clients (API key/mTLS placeholders)
-- Centralized secret store integration
-- Outbound allowlist enforcement
-- Audit logging with retention policies
-- SIEM/syslog forwarding
+### Build + run
 
-### Release Gating by Tier
-| Tier | Required Checks |
-|------|----------------|
-| Baseline | Lint + unit tests |
-| Public | + Smoke bundle (dependency, sandbox, token, log redaction) |
-| Enterprise | + Full security suite, SAST, dependency + secret scanning, checklist sign-off |
+```bash
+docker build -t canvas-mcp:local .
 
-## Environment Configuration Reference
+docker run --rm -it \
+  -e CANVAS_API_TOKEN=<token> \
+  -e CANVAS_API_URL=https://canvas.example.edu/api/v1 \
+  -e CANVAS_MCP_USER_TYPE=educator \
+  -e ENABLE_DATA_ANONYMIZATION=true \
+  canvas-mcp:local
+```
+
+For stdio transport you'll typically run this behind an MCP client launcher that spawns the container.
+
+---
+
+## Environment Variables
+
+Full schema in [`env.template`](../env.template). Minimal production surface:
 
 ### Required
+- `CANVAS_API_TOKEN` — Canvas personal access token
+- `CANVAS_API_URL` — Full URL with `/api/v1`
+
+### Recommended for production
+- `CANVAS_MCP_USER_TYPE` — set to `educator` or `student` to lock down the surface (default `all`)
+- `ENABLE_DATA_ANONYMIZATION=true` — required for FERPA workflows
+- `LOG_LEVEL=INFO`, `LOG_API_REQUESTS=false`, `DEBUG=false`
+
+### Sandbox (if enabling `execute_typescript`)
+- `ENABLE_TS_SANDBOX=true`
+- `TS_SANDBOX_MODE=container` (prefer container for untrusted code)
+- `TS_SANDBOX_CONTAINER_IMAGE=node:20-alpine` (default)
+- `TS_SANDBOX_BLOCK_OUTBOUND_NETWORK=true` (with allowlist)
+- `TS_SANDBOX_ALLOWLIST_HOSTS=canvas.example.edu`
+- `TS_SANDBOX_CPU_LIMIT=1000` (millicpus — container mode only)
+- `TS_SANDBOX_MEMORY_LIMIT_MB=512`
+- `TS_SANDBOX_TIMEOUT_SEC=60`
+
+### Config overlays
+
+`config/overlays/{baseline,public,enterprise}.env` provide layered presets:
+
 ```bash
-CANVAS_API_TOKEN=           # Canvas API access token
-CANVAS_API_URL=             # Canvas instance URL (https://...)
+source config/overlays/enterprise.env    # before starting
+canvas-mcp-server
 ```
 
-### Server
+---
+
+## MCP Registry Publication
+
+The project publishes to the Model Context Protocol registry under `io.github.vishalsachdev/canvas-mcp`.
+
+Registry metadata lives in [`server.json`](../server.json):
+
+- `transport.type`: `stdio`
+- `packages[0]`:
+  - `registryType`: `pypi`
+  - `identifier`: `canvas-mcp`
+  - `version`: `1.0.6`
+  - `transport.python.module`: `canvas_mcp.server`
+- `configuration.env`:
+  - `CANVAS_API_TOKEN` (required)
+  - `CANVAS_API_URL` (required)
+  - `ENABLE_DATA_ANONYMIZATION` (default `false`)
+  - `ANONYMIZATION_DEBUG` (default `false`)
+
+Registry entry: <https://static.modelcontextprotocol.io/…>.
+
+---
+
+## Release Process
+
+### 1. Prepare release
+
 ```bash
-MCP_SERVER_NAME=canvas-mcp  # Server display name
-DEBUG=false                 # Debug mode
-API_TIMEOUT=30              # HTTP timeout (seconds)
-CACHE_TTL=300               # Cache lifetime (seconds)
-MAX_CONCURRENT_REQUESTS=10  # Concurrent API limit
+# Bump version in pyproject.toml AND src/canvas_mcp/__init__.py AND server.json
+# Update README/CHANGELOG if applicable
+git add pyproject.toml src/canvas_mcp/__init__.py server.json
+git commit -m "chore: bump version to vX.Y.Z"
+git push
 ```
 
-### Privacy
+### 2. Tag
+
 ```bash
-ENABLE_DATA_ANONYMIZATION=false  # FERPA anonymization (educators: set true)
-ANONYMIZATION_DEBUG=false        # Debug anonymization mapping
+git tag vX.Y.Z
+git push --tags
 ```
 
-### Display
+### 3. `publish-mcp.yml` runs automatically on `v*` tag
+
+Steps (from `.github/workflows/publish-mcp.yml`):
+
+1. Set up Python 3.12
+2. `pip install uv` → `uv pip install --system -e .`
+3. `uv pip install --system pytest pytest-asyncio` → `pytest tests/` (non-blocking if no tests)
+4. `uv pip install --system build` → `python -m build`
+5. **Publish to PyPI** via `pypa/gh-action-pypi-publish@release/v1` with `skip-existing: true`
+6. **Install MCP Publisher** + push `server.json` to the MCP Registry (uses OIDC id-token)
+
+### 4. Verify
+
+- <https://pypi.org/project/canvas-mcp/> shows the new version
+- Registry search finds the new version
+- Test install in a clean venv: `uv pip install canvas-mcp==X.Y.Z && canvas-mcp-server --config`
+
+---
+
+## CI/CD Pipelines
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `canvas-mcp-testing.yml` | push/PR to main,development · paths: `src/canvas_mcp/tools/discussions.py` or `tests/**` | Narrow pytest smoke |
+| `security-testing.yml` | push/PR + Sunday cron | `pytest tests/security/ --cov=src/canvas_mcp`; uploads coverage artifact |
+| `publish-mcp.yml` | tag `v*` | PyPI + MCP Registry publish |
+| `auto-update-docs.yml` | PR touching `src/canvas_mcp/tools/**` or `server.py` | Claude Code Action pushes doc updates |
+| `auto-claude-review.yml` | PR `opened` | Posts `@claude` comment to trigger review |
+| `claude-code-review.yml` | PR events | Claude PR review |
+| `claude.yml` | `@claude` mentions (issue/PR comment, review) | Claude Code responder |
+| `auto-label-issues.yml` | issue opened | Claude issue triage + labels |
+| `weekly-maintenance.yml` | Sunday 00:00 UTC + manual | Maintenance tasks |
+
+All workflows use **Python 3.12**. Publishing uses `uv`.
+
+---
+
+## Infrastructure Requirements
+
+- **Compute:** One process per MCP client session. stdio transport → no listening ports. Memory footprint typically <150 MB RSS idle; scales with cache size + concurrent HTTP requests (`MAX_CONCURRENT_REQUESTS` default 10).
+- **Network:** Outbound HTTPS to `CANVAS_API_URL` only. If using container sandbox, additionally Docker/Podman socket.
+- **Storage:** No persistent storage required. All state is in-process. Logs to stderr.
+- **Secrets:** `CANVAS_API_TOKEN` must be supplied via env; **never commit to git**. Use your platform's secret manager (systemd credentials, Docker secrets, Kubernetes Secret, etc.).
+
+---
+
+## Health Check / Smoke Tests
+
 ```bash
-CANVAS_MCP_VERBOSITY=COMPACT    # COMPACT|STANDARD|VERBOSE
-CANVAS_MCP_USER_TYPE=all        # all|educator (filters available tools)
+# 1. Connectivity — calls GET /users/self
+canvas-mcp-server --test
+# Expected: ✓ Successfully connected as <your name>
+
+# 2. Config — print resolved env (tokens redacted)
+canvas-mcp-server --config
+
+# 3. Import sanity (used in Dockerfile HEALTHCHECK)
+python -c "import canvas_mcp; print('OK')"
+
+# 4. Inside container
+docker exec -it <container> python -c "import canvas_mcp; print('OK')"
 ```
 
-### Code Execution Sandbox
+---
+
+## Rollback
+
+If a release breaks production:
+
 ```bash
-ENABLE_TS_SANDBOX=false         # Enable sandboxing
-TS_SANDBOX_MODE=auto            # auto|docker|local
-TS_SANDBOX_TIMEOUT=120000       # Timeout (ms)
-TS_SANDBOX_MEMORY_MB=512        # Memory limit
-TS_SANDBOX_CPU_SECONDS=60       # CPU limit
-TS_SANDBOX_NETWORK_BLOCK=false  # Block outbound network
-TS_SANDBOX_OUTBOUND_ALLOWLIST=  # Allowed domains
-TS_SANDBOX_CONTAINER_IMAGE=node:20-alpine
+# End users
+uv pip install canvas-mcp==<previous-version>
+
+# Registry
+# Previous versions remain available; point clients at the older version in server.json
 ```
 
-### Development
-```bash
-LOG_LEVEL=INFO                  # Logging level
-LOG_API_REQUESTS=false          # Log HTTP requests
-INSTITUTION_NAME=               # Institution display name
-TIMEZONE=                       # Default timezone
-```
+PyPI publishes are immutable (you cannot overwrite `X.Y.Z`); publish `X.Y.Z+1` with a fix rather than trying to yank.
+
+---
+
+## Security Considerations for Production
+
+- **Token scope** — Prefer tokens tied to a non-human service account with only the permissions your tools need. Treat every MCP session as acting on behalf of that account's Canvas identity.
+- **`ENABLE_DATA_ANONYMIZATION=true`** is the default recommended stance when distributing responses outside the educator's own LLM session.
+- **`CANVAS_MCP_USER_TYPE`** — set explicitly in prod to `educator` or `student` rather than the default `all`, which includes developer tools like `execute_typescript`.
+- **TS sandbox** — If enabling `execute_typescript`, prefer `TS_SANDBOX_MODE=container` over `local` for untrusted code. `local` runs in-process with limited isolation.
+- **Logs** — `LOG_API_REQUESTS=false` by default; keep it false in prod to avoid writing URLs with query-param tokens. `tests/security/test_authentication.py` verifies tokens never leak into error messages.
+- **Weekly scan** — `security-testing.yml` + `weekly-maintenance.yml` run `pip-audit` for CVE detection (`tests/security/test_dependencies.py`).
+
+See [SECURITY.md](../SECURITY.md) and [SECURITY_IMPLEMENTATION_GUIDE.md](../SECURITY_IMPLEMENTATION_GUIDE.md).

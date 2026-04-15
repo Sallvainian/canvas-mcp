@@ -1,248 +1,372 @@
-# Canvas MCP - API Contracts
+# API Contracts
 
-**Generated:** 2026-03-12 | **Scan Level:** Exhaustive
+**Project:** canvas-mcp · **Version:** 1.0.6
+**Generated:** 2026-04-14 (full rescan, exhaustive)
+
+**Total surface:** **129 MCP tools**, **3 resources**, **1 prompt** across 23 tool modules.
+
+All Canvas API traffic routes through `core/client.py::make_canvas_request()`. All inputs pass through `@validate_params` (see `core/validation.py`). All student data passes through `anonymize_response_data()` at the response boundary when `ENABLE_DATA_ANONYMIZATION=true`.
 
 ---
 
-## Overview
+## Connection Summary
 
-Canvas MCP interacts with the Canvas LMS REST API v1. All requests go through the centralized `make_canvas_request()` function in `core/client.py`, which handles authentication, rate limiting, pagination, and anonymization.
+- **Base URL:** `{CANVAS_API_URL}` (must include `/api/v1`)
+- **Auth:** `Authorization: Bearer {CANVAS_API_TOKEN}`
+- **Content-Type:** `application/json` (default) or `application/x-www-form-urlencoded` (tools pass `use_form_data=True`)
+- **Pagination:** RFC 5988 Link headers via `fetch_all_paginated_results()`
+- **Retry:** 3× on HTTP 429 with exponential backoff honoring `Retry-After`
+- **Anonymization:** Applied once after response parse, endpoint-dispatched (see `_should_anonymize_endpoint` + `_determine_data_type` in `core/client.py`)
 
-**Base URL:** Configured via `CANVAS_API_URL` environment variable
-**Authentication:** Bearer token via `CANVAS_API_TOKEN`
-**Rate Limits:** ~700 requests/10 minutes (Canvas-enforced)
+---
 
-## Request Patterns
+## Resources (MCP Resources)
 
-| Pattern | Method | Content-Type | Used By |
-|---------|--------|-------------|---------|
-| Standard JSON | GET/POST/PUT/DELETE | application/json | Most tools |
-| Form Data | POST/PUT | application/x-www-form-urlencoded | Submissions, modules, messaging |
-| File Upload | POST (3-step) | multipart/form-data | File submissions |
-| Paginated | GET | - | List endpoints (auto-handled) |
+| URI | Function | Canvas backend |
+|-----|----------|----------------|
+| `canvas://course/{course_identifier}/syllabus` | `get_course_syllabus` | `GET /courses/{id}` → `syllabus_body` field |
+| `canvas://course/{course_identifier}/assignment/{assignment_id}/description` | `get_assignment_description` | `GET /courses/{id}/assignments/{id}` → `description` field |
+| `canvas://code-api/{file_path}` | `get_code_api_file` | Reads from `src/canvas_mcp/code_api/` (path-traversal-checked; `.ts/.js/.mts/.mjs` only) |
 
-## Canvas API Endpoints by Tool Module
+## Prompts (MCP Prompts)
 
-### Course Tools (`tools/courses.py`)
+| Name | Function | Action |
+|------|----------|--------|
+| `summarize-course` | `summarize_course(course_identifier)` | Returns system+user prompt with course info, assignment count, upcoming assignment count, module count |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_courses` | GET | `/api/v1/courses` | List enrolled courses |
-| `get_course_details` | GET | `/api/v1/courses/{id}` | Course info with syllabus |
-| `get_course_content_overview` | GET | `/api/v1/courses/{id}` + sub-endpoints | Aggregated content summary |
+---
 
-### Assignment Tools (`tools/assignments.py`)
+## Tool Conventions
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_assignments` | GET | `/api/v1/courses/{id}/assignments` | All assignments in course |
-| `get_assignment_details` | GET | `/api/v1/courses/{id}/assignments/{aid}` | Single assignment details |
-| `create_assignment` | POST | `/api/v1/courses/{id}/assignments` | Create new assignment |
-| `update_assignment` | PUT | `/api/v1/courses/{id}/assignments/{aid}` | Update assignment properties |
-| `delete_assignment` | DELETE | `/api/v1/courses/{id}/assignments/{aid}` | Delete assignment |
-| `list_submissions` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions` | All submissions |
-| `list_ungraded_submissions` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions` | Filtered ungraded |
-| `get_submission_content` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Submission with content |
-| `get_submission_history` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Submission versions |
-| `get_submission_comments` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Comments on submission |
-| `post_submission_comment` | PUT | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Add comment |
-| `download_submission_attachment` | GET | attachment URL | Download file attachment |
-| `bulk_grade_submissions` | POST | `/api/v1/courses/{id}/assignments/{aid}/submissions/update_grades` | Bulk grade via progress |
-| `submit_file_for_student` | POST | 3-step upload | Submit file on behalf of student |
+Every tool below:
+- Is `async def` decorated with `@mcp.tool()` + `@validate_params`
+- Accepts `course_identifier: str | int` (ID, course code, or `sis_course_id:…`) resolved by `get_course_id()`
+- Returns a JSON-serialized `str` (errors have an `"error"` key; never raises)
+- Formats dates via `format_date()` / `format_date_smart()`
+- Honors `CANVAS_MCP_VERBOSITY` when documented
 
-### Rubric Tools (`tools/rubrics.py`)
+---
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_all_rubrics` | GET | `/api/v1/courses/{id}/rubrics` | All course rubrics |
-| `list_assignment_rubrics` | GET | `/api/v1/courses/{id}/assignments/{aid}` | Rubrics for assignment |
-| `get_rubric_details` | GET | `/api/v1/courses/{id}/rubrics/{rid}` | Rubric criteria details |
-| `get_assignment_rubric_details` | GET | `/api/v1/courses/{id}/assignments/{aid}` | Assignment's rubric |
-| `create_rubric` | POST | `/api/v1/courses/{id}/rubrics` | Create rubric with criteria |
-| `update_rubric` | PUT | `/api/v1/courses/{id}/rubrics/{rid}` | Update rubric |
-| `delete_rubric` | DELETE | `/api/v1/courses/{id}/rubrics/{rid}` | Delete rubric |
-| `associate_rubric_with_assignment` | POST | `/api/v1/courses/{id}/assignments/{aid}` | Link rubric to assignment |
-| `grade_with_rubric` | PUT | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Grade using rubric |
-| `get_submission_rubric_assessment` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions/{uid}` | Get rubric assessment |
+## 1. `accessibility.py` — 4 tools · `register_accessibility_tools`
 
-### Discussion Tools (`tools/discussions.py`)
+| Tool | Signature | Canvas endpoint | Notes |
+|------|-----------|-----------------|-------|
+| `fetch_ufixit_report` | `(course_identifier)` | `GET /courses/{id}/ufixit_summary` | Requires UFIXIT integration |
+| `parse_ufixit_violations` | `(course_identifier, include_fixes=False)` | — (processes fetched data) | Maps error codes → WCAG criteria |
+| `format_accessibility_summary` | `(course_identifier, verbosity=None)` | — | Verbosity-aware |
+| `scan_course_content_accessibility` | `(course_identifier, check_html=True, check_alt_text=True)` | fetches course content | HTML semantic + alt-text checks |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_discussion_topics` | GET | `/api/v1/courses/{id}/discussion_topics` | All discussions |
-| `get_discussion_topic_details` | GET | `/api/v1/courses/{id}/discussion_topics/{tid}` | Topic details |
-| `get_discussion_with_replies` | GET | `/api/v1/courses/{id}/discussion_topics/{tid}/view` | Full thread |
-| `list_discussion_entries` | GET | `/api/v1/courses/{id}/discussion_topics/{tid}/entries` | Top-level entries |
-| `get_discussion_entry_details` | GET | `/api/v1/courses/{id}/discussion_topics/{tid}/entries/{eid}` | Single entry |
-| `create_discussion_topic` | POST | `/api/v1/courses/{id}/discussion_topics` | Create topic |
-| `find_discussion` | GET | `/api/v1/courses/{id}/discussion_topics` | Search discussions |
-| `post_discussion_entry` | POST | `/api/v1/courses/{id}/discussion_topics/{tid}/entries` | Post entry |
-| `reply_to_discussion_entry` | POST | `/api/v1/courses/{id}/discussion_topics/{tid}/entries/{eid}/replies` | Reply to entry |
+## 2. `analytics.py` — 11 tools · `register_analytics_tools`
 
-### Discussion Analytics (`tools/discussion_analytics.py`)
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `get_course_student_summaries` | `(course_identifier)` | `GET /courses/{id}/users` (paginated) |
+| `get_student_activity` | `(course_identifier, user_id, start_date=None, end_date=None)` | `GET /courses/{id}/analytics/users/{user_id}` |
+| `get_student_assignment_data` | `(course_identifier, user_id)` | `GET /courses/{id}/assignments` + `GET /courses/{id}/students/submissions` |
+| `get_student_communication` | `(course_identifier, user_id)` | `GET /courses/{id}/discussion_topics` + `/announcements` |
+| `get_course_activity` | `(course_identifier, start_date=None, end_date=None)` | `GET /courses/{id}/analytics` |
+| `get_assignment_statistics` | `(course_identifier, assignment_id=None)` | `GET /courses/{id}/assignments/{id}/submissions` |
+| `start_course_report` | `(course_identifier, report_type)` | `POST /courses/{id}/reports/{report_type}` |
+| `get_report_status` | `(course_identifier, report_id)` | `GET /courses/{id}/reports/{report_type}/{id}` |
+| `get_anonymization_status` | `(course_identifier)` | — (local state) |
+| `get_student_analytics` | `(course_identifier, user_id)` | aggregates multiple endpoints |
+| `create_student_anonymization_map` | `(course_identifier, output_format="csv")` | — (local generation) |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `get_discussion_participation_summary` | GET | Multiple discussion endpoints | Participation stats |
-| `grade_discussion_participation` | PUT | `/api/v1/courses/{id}/assignments/{aid}/submissions/update_grades` | Grade participation |
-| `export_discussion_data` | GET | Discussion endpoints | Export for analysis |
+## 3. `assignment_analytics.py` — 9 tools · `register_assignment_analytics_tools`
 
-### Messaging Tools (`tools/messaging.py`)
+| Tool | Purpose |
+|------|---------|
+| `list_submissions` | List submissions for an assignment |
+| `get_submission_content` | Get the text/body/URL of a specific submission |
+| `get_submission_comments` | List comments on a submission |
+| `post_submission_comment` | Post a comment on a submission |
+| `get_submission_history` | Retrieve submission history (all attempts) for a student |
+| `download_submission_attachment` | Download a file attached to a submission |
+| `list_ungraded_submissions` | List submissions without grades |
+| `list_resubmitted_after_grading` | List submissions resubmitted after initial grading |
+| `get_assignment_analytics` | Statistical analytics (mean, median, distribution) for an assignment |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `send_conversation` | POST | `/api/v1/conversations` | Send message (form data) |
-| `list_conversations` | GET | `/api/v1/conversations` | List conversations |
-| `get_conversation_details` | GET | `/api/v1/conversations/{cid}` | Conversation details |
-| `mark_conversations_read` | PUT | `/api/v1/conversations` | Mark as read |
-| `send_bulk_messages_from_list` | POST | `/api/v1/conversations` (per recipient) | Bulk messaging |
-| `send_peer_review_reminders` | POST | `/api/v1/conversations` | Peer review reminders |
-| `send_peer_review_followup_campaign` | POST | `/api/v1/conversations` | Follow-up campaign |
+Primary endpoints: `GET /courses/{id}/assignments/{id}/submissions`, `/submission_history`, `/comments`.
 
-### Analytics Tools (`tools/analytics.py`)
+## 4. `assignments.py` — 8 tools · `register_assignment_tools`
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `get_course_student_summaries` | GET | `/api/v1/courses/{id}/analytics/student_summaries` | Student summaries |
-| `get_student_activity` | GET | `/api/v1/courses/{id}/analytics/users/{uid}/activity` | User activity |
-| `get_student_assignment_data` | GET | `/api/v1/courses/{id}/analytics/users/{uid}/assignments` | Assignment data |
-| `get_student_communication` | GET | `/api/v1/courses/{id}/analytics/users/{uid}/communication` | Message stats |
-| `get_course_activity` | GET | `/api/v1/courses/{id}/analytics/activity` | Course-wide activity |
-| `get_assignment_statistics` | GET | `/api/v1/courses/{id}/analytics/assignments` | Score distributions |
-| `get_assignment_analytics` | GET | `/api/v1/courses/{id}/assignments/{aid}/submissions` | Assignment performance |
-| `get_student_analytics` | GET | Multiple analytics endpoints | Comprehensive student view |
-| `start_course_report` | POST | `/api/v1/courses/{id}/reports/{type}` | Start Canvas report |
-| `get_report_status` | GET | `/api/v1/courses/{id}/reports/{type}/{rid}` | Check report progress |
+| Tool | Signature | Canvas endpoint | Notes |
+|------|-----------|-----------------|-------|
+| `list_grading_periods` | `(course_identifier)` | `GET /courses/{id}/grading_periods` | Paginated |
+| `list_assignments` | `(course_identifier, include_submission_types=False, verbosity=None)` | `GET /courses/{id}/assignments` | Paginated, verbosity-aware |
+| `get_assignment_details` | `(course_identifier, assignment_id)` | `GET /courses/{id}/assignments/{id}` | Includes rubric |
+| `update_assignment` | `(course_identifier, assignment_id, name?, description?, due_date?, points_possible?)` | `PUT /courses/{id}/assignments/{id}` | Markdown→HTML auto-conversion |
+| `delete_assignment` | `(course_identifier, assignment_id)` | `DELETE /courses/{id}/assignments/{id}` | Irreversible |
+| `assign_peer_review` | `(course_identifier, assignment_id, assessor_user_id, subject_user_id)` | `POST /courses/{id}/assignments/{id}/peer_reviews` | — |
+| `list_peer_reviews` | `(course_identifier, assignment_id, submission_id=None)` | `GET /courses/{id}/assignments/{id}/peer_reviews` | Optional submission filter |
+| `create_assignment` | `(course_identifier, name, description?, due_date?, points_possible?, submission_types?, publish=False)` | `POST /courses/{id}/assignments` | Markdown→HTML auto-conversion |
 
-### Student Tools (`tools/student_tools.py`)
+## 5. `code_execution.py` — 2 tools · `register_code_execution_tools` (developer-only: `user_type=all`)
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `get_my_upcoming_assignments` | GET | `/api/v1/users/self/upcoming_events` | Personal upcoming |
-| `get_my_todo_items` | GET | `/api/v1/users/self/todo` | Personal TODO list |
-| `get_my_submission_status` | GET | `/api/v1/courses/{id}/assignments` + submissions | Submission tracker |
-| `get_my_course_grades` | GET | `/api/v1/courses` with enrollments | All grades |
-| `get_my_peer_reviews_todo` | GET | `/api/v1/courses/{id}/assignments/{aid}/peer_reviews` | Pending reviews |
+| Tool | Signature | Purpose |
+|------|-----------|---------|
+| `execute_typescript` | `(code, sandbox_mode="auto", allowed_hosts=None, memory_limit_mb=None, cpu_limit_millicpus=None, timeout_seconds=30)` | Run user-supplied TS in Node.js sandbox with Canvas API access |
+| `list_code_api_modules` | `(detail_level="names")` | Introspect TS `code_api/` exports (names / signatures / full) |
 
-### Module Tools (`tools/modules.py`)
+**Security:** network allowlist guard injected as a prelude, container image SHA256 check, memory/CPU/timeout enforcement; modes: `auto` (detect), `local` (Node), `container` (Docker/Podman).
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_modules` | GET | `/api/v1/courses/{id}/modules` | All modules |
-| `list_module_items` | GET | `/api/v1/courses/{id}/modules/{mid}/items` | Module items |
-| `create_module` | POST | `/api/v1/courses/{id}/modules` | Create module |
-| `update_module` | PUT | `/api/v1/courses/{id}/modules/{mid}` | Update module |
-| `delete_module` | DELETE | `/api/v1/courses/{id}/modules/{mid}` | Delete module |
-| `add_module_item` | POST | `/api/v1/courses/{id}/modules/{mid}/items` | Add item |
-| `update_module_item` | PUT | `/api/v1/courses/{id}/modules/{mid}/items/{iid}` | Update item |
-| `delete_module_item` | DELETE | `/api/v1/courses/{id}/modules/{mid}/items/{iid}` | Delete item |
+## 6. `content_migrations.py` — 1 tool · `register_content_migration_tools`
 
-### Page Tools (`tools/pages.py`)
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `copy_course_content` | `(source_course_identifier, target_course_identifier, include_items=None, exclude_items=None)` | `POST /courses/{target_id}/content_migrations` (migration_type=`course_copy_importer`) |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_pages` | GET | `/api/v1/courses/{id}/pages` | All pages |
-| `get_page_content` | GET | `/api/v1/courses/{id}/pages/{url}` | Page body |
-| `get_page_details` | GET | `/api/v1/courses/{id}/pages/{url}` | Page metadata |
-| `get_front_page` | GET | `/api/v1/courses/{id}/front_page` | Course front page |
-| `create_page` | POST | `/api/v1/courses/{id}/pages` | Create page |
-| `edit_page_content` | PUT | `/api/v1/courses/{id}/pages/{url}` | Update content |
-| `update_page_settings` | PUT | `/api/v1/courses/{id}/pages/{url}` | Publish, front page |
-| `bulk_update_pages` | PUT | Multiple page endpoints | Batch operations |
+## 7. `courses.py` — 3 tools · `register_course_tools`
 
-### Quiz Tools (`tools/quizzes.py`)
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `list_courses` | `(account_id=None, include_syllabus=False, verbosity=None)` | `GET /accounts/{id}/courses` or `GET /courses` |
+| `get_course_details` | `(course_identifier, include_syllabus=False)` | `GET /courses/{id}` |
+| `get_course_content_overview` | `(course_identifier)` | Aggregates `/modules`, `/assignments`, `/discussion_topics`, `/pages` |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_quizzes` | GET | `/api/v1/courses/{id}/quizzes` | All quizzes |
-| `get_quiz_details` | GET | `/api/v1/courses/{id}/quizzes/{qid}` | Quiz details |
-| `create_quiz` | POST | `/api/v1/courses/{id}/quizzes` | Create quiz |
-| `update_quiz` | PUT | `/api/v1/courses/{id}/quizzes/{qid}` | Update quiz |
-| `delete_quiz` | DELETE | `/api/v1/courses/{id}/quizzes/{qid}` | Delete quiz |
-| `publish_quiz` | PUT | `/api/v1/courses/{id}/quizzes/{qid}` | Publish |
-| `unpublish_quiz` | PUT | `/api/v1/courses/{id}/quizzes/{qid}` | Unpublish |
-| `list_quiz_questions` | GET | `/api/v1/courses/{id}/quizzes/{qid}/questions` | Questions |
-| `add_quiz_question` | POST | `/api/v1/courses/{id}/quizzes/{qid}/questions` | Add question |
-| `update_quiz_question` | PUT | `/api/v1/courses/{id}/quizzes/{qid}/questions/{qqid}` | Update question |
-| `delete_quiz_question` | DELETE | `/api/v1/courses/{id}/quizzes/{qid}/questions/{qqid}` | Delete question |
-| `get_quiz_statistics` | GET | `/api/v1/courses/{id}/quizzes/{qid}/statistics` | Quiz stats |
-| `list_quiz_submissions` | GET | `/api/v1/courses/{id}/quizzes/{qid}/submissions` | Submissions |
+## 8. `discovery.py` — 1 tool · `register_discovery_tools` (developer-only: `user_type=all`)
 
-### Peer Review Tools (`tools/peer_reviews.py` + `peer_review_comments.py`)
+| Tool | Signature | Purpose |
+|------|-----------|---------|
+| `search_canvas_tools` | `(query, detail_level="names")` | Fuzzy-search `code_api/` TS exports by name/docstring |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_peer_reviews` | GET | `/api/v1/courses/{id}/assignments/{aid}/peer_reviews` | All reviews |
-| `get_peer_review_assignments` | GET | Peer review + submission endpoints | Review assignments |
-| `assign_peer_review` | POST | `/api/v1/courses/{id}/assignments/{aid}/submissions/{sid}/peer_reviews` | Create review |
-| `get_peer_review_completion_analytics` | GET | Multiple endpoints | Completion stats |
-| `get_peer_review_followup_list` | GET | Multiple endpoints | Follow-up priorities |
-| `generate_peer_review_report` | GET | Multiple endpoints | Report generation |
-| `get_peer_review_comments` | GET | Submission comment endpoints | Extract comments |
-| `analyze_peer_review_quality` | GET | Comment + quality analysis | Quality metrics |
-| `identify_problematic_peer_reviews` | GET | Comment analysis | Flag issues |
-| `generate_peer_review_feedback_report` | GET | Multiple endpoints | Feedback report |
-| `extract_peer_review_dataset` | GET | Multiple endpoints | Dataset export |
+## 9. `discussion_analytics.py` — 3 tools · `register_discussion_analytics_tools`
 
-### Enrollment Tools (`tools/enrollment.py`)
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `get_discussion_participation_summary` | `(course_identifier, discussion_id, categorize="all")` | `GET /courses/{id}/discussion_topics/{id}/entries` |
+| `grade_discussion_participation` | `(course_identifier, discussion_id, assignment_id=None, dry_run=True, min_posts=0, min_replies=0)` | entries + optionally `PUT /courses/{id}/assignments/{id}/submissions/{user_id}` |
+| `export_discussion_data` | `(course_identifier, discussion_id, format="csv")` | local aggregation (CSV/JSON) |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `list_users` | GET | `/api/v1/courses/{id}/users` | Course users |
-| `find_student` | GET | `/api/v1/courses/{id}/users` + search | Find by name/email |
-| `create_user` | POST | `/api/v1/accounts/{aid}/users` | Create user |
-| `enroll_user` | POST | `/api/v1/courses/{id}/enrollments` | Enroll in course |
-| `list_groups` | GET | `/api/v1/courses/{id}/groups` | Course groups |
+## 10. `discussions.py` — 11 tools · `register_discussion_tools`
 
-### Gradebook Tools (`tools/gradebook.py`)
+| Tool | Purpose | Primary endpoint |
+|------|---------|------------------|
+| `list_discussion_topics` | List topics in a course | `GET /courses/{id}/discussion_topics` |
+| `get_discussion_topic_details` | Topic metadata | `GET /courses/{id}/discussion_topics/{id}` |
+| `list_discussion_entries` | List entries with optional full content + replies | `GET /courses/{id}/discussion_topics/{id}/entries` |
+| `get_discussion_entry_details` | Entry + all replies | `GET /courses/{id}/discussion_topics/{id}/entries/{id}` |
+| `get_discussion_with_replies` | Enhanced entries fetcher with reply expansion | `/entries` + `/replies` |
+| `post_discussion_entry` | Post top-level entry | `POST /courses/{id}/discussion_topics/{id}/entries` |
+| `reply_to_discussion_entry` | Reply to an entry | `POST /courses/{id}/discussion_topics/{id}/entries/{id}/replies` |
+| `create_discussion_topic` | Create new topic | `POST /courses/{id}/discussion_topics` |
+| `list_announcements` | List announcements | `GET /courses/{id}/discussion_topics?only_announcements=true` |
+| `create_announcement` | Create announcement with optional scheduling | `POST /courses/{id}/discussion_topics` (is_announcement=true) |
+| `delete_announcements` | Delete by ID/filter — **defaults to dry_run=True for safety** | `DELETE /courses/{id}/discussion_topics/{id}` |
 
-| Tool | Method | Endpoint | Description |
-|------|--------|----------|-------------|
-| `export_grades` | GET | Assignment + submission endpoints | Grade export (CSV) |
-| `get_assignment_groups` | GET | `/api/v1/courses/{id}/assignment_groups` | Assignment groups |
-| `create_assignment_group` | POST | `/api/v1/courses/{id}/assignment_groups` | Create group |
-| `update_assignment_group` | PUT | `/api/v1/courses/{id}/assignment_groups/{gid}` | Update group |
-| `configure_late_policy` | POST/PUT | `/api/v1/courses/{id}/late_policy` | Late policy |
-| `list_grading_periods` | GET | `/api/v1/courses/{id}/grading_periods` | Grading periods |
+## 11. `enrollment.py` — 5 tools · `register_enrollment_tools`
 
-### Other Tools
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `create_user` | `(account_id, name, email, login_id=None, sis_user_id=None, send_confirmation=False, skip_confirmation=True)` | `POST /accounts/{id}/users` |
+| `enroll_user` | `(course_identifier, user_id, enrollment_type="StudentEnrollment", enrollment_state="active", notify=False)` | `POST /courses/{id}/enrollments` |
+| `submit_file_for_student` | `(course_identifier, assignment_id, user_id, file_path, content_type=None, comment=None)` | 3-step upload + `POST /submissions` |
+| `list_groups` | `(course_identifier)` | `GET /courses/{id}/groups` + `GET /groups/{id}/users` |
+| `list_users` | `(course_identifier, verbosity=None)` | `GET /courses/{id}/users` (+enrollments, email) |
 
-| Tool | Module | Method | Endpoint | Description |
-|------|--------|--------|----------|-------------|
-| `list_announcements` | other_tools | GET | `/api/v1/announcements` | Course announcements |
-| `create_announcement` | other_tools | POST | `/api/v1/courses/{id}/discussion_topics` | Create announcement |
-| `delete_announcements` | other_tools | DELETE | `/api/v1/courses/{id}/discussion_topics/{tid}` | Delete announcement |
-| `get_unread_count` | other_tools | GET | `/api/v1/conversations/unread_count` | Unread messages |
-| `find_assignment` | search_helpers | GET | `/api/v1/courses/{id}/assignments` | Search assignments |
-| `find_discussion` | search_helpers | GET | `/api/v1/courses/{id}/discussion_topics` | Search discussions |
-| `copy_course_content` | content_migrations | POST | `/api/v1/courses/{id}/content_migrations` | Copy content |
-| `scan_course_content_accessibility` | accessibility | GET | UDOIT integration | a11y scan |
-| `create_student_anonymization_map` | accessibility | GET | User endpoints | Anonymization CSV |
-| `get_anonymization_status` | accessibility | - | Local state | Check anonymization |
+Enrollment types: `StudentEnrollment / TeacherEnrollment / TaEnrollment / ObserverEnrollment / DesignerEnrollment`. States: `active / invited / creation_pending / inactive`.
 
-## Canvas API Conventions
+## 12. `gradebook.py` — 5 tools · `register_gradebook_tools`
 
-### Course Identifiers
-All course parameters accept three formats:
-- **Canvas ID:** `12345` (numeric)
-- **Course code:** `CS101_2024_Fall` (human-readable)
-- **SIS ID:** `sis_course_id:SIS123` (institutional)
+| Tool | Signature | Canvas endpoint |
+|------|-----------|-----------------|
+| `export_grades` | `(course_identifier, format="csv", include_hidden=False)` | `GET /assignments` + `GET /students/submissions` |
+| `get_assignment_groups` | `(course_identifier)` | `GET /courses/{id}/assignment_groups` |
+| `create_assignment_group` | `(course_identifier, name, weight=None)` | `POST /courses/{id}/assignment_groups` |
+| `update_assignment_group` | `(course_identifier, group_id, name?, weight?, drop_lowest?, drop_highest?)` | `PUT /courses/{id}/assignment_groups/{id}` |
+| `configure_late_policy` | `(course_identifier, late_submission_interval="day", late_submission_minimum_percent=0.0, missing_submission_percent=0.0)` | `PUT /courses/{id}` |
 
-Resolution handled by `core/cache.py:get_course_id()`.
+## 13. `grading_export.py` — 1 tool · `register_grading_export_tools` ★ NEW
 
-### Form Data vs JSON
-- **Form data required:** Submissions, modules, conversations, rubric grading
-- **JSON used:** Most other creation/update operations
-- **Convention:** Tools use `use_form_data=True` parameter in `make_canvas_request()`
+| Tool | Signature | Purpose |
+|------|-----------|---------|
+| `grading_export` | `(course_code=None, assignment_filter=None, group_filter=None, student_filter=None, gender_csv_path=None, submission_state_filter=None, date_start=None, date_end=None, grade_min=None, grade_max=None, format="csv")` | Specialized per-assignment bulk submission export (Science 8 Cottone). Uses `GET /courses/{id}/assignments/{id}/submissions` endpoint (switched in commit `0307c55`). Hardcoded period→course-ID map (P1–P9). CSV includes: Student ID, Name, Gender, Assignment, Submission Time, Grade, Points, Status. |
 
-### Pagination
-- Default `per_page`: 10-100 depending on endpoint
-- Automatic collection via `fetch_all_paginated_results()`
-- Canvas uses `Link` header with `rel="next"` for pagination
+## 14. `messaging.py` — 8 tools · `register_messaging_tools`
 
-### Include Parameters
-Many endpoints accept `include[]` arrays for extra data:
-- `include[]=submission` - Include submission with assignment
-- `include[]=user` - Include user details
-- `include[]=rubric_assessment` - Include rubric scoring
-- `include[]=total_scores` - Include enrollment grades
+| Tool | Signature | Canvas endpoint | Notes |
+|------|-----------|-----------------|-------|
+| `send_conversation` | `(course_identifier, recipient_ids, subject, body, group_conversation=False, bulk_message=False, context_code=None, mode="sync", force_new=False, attachment_ids=None)` | `POST /conversations` | Form-encoded |
+| `send_peer_review_reminders` | `(course_identifier, assignment_id, recipient_ids, custom_message=None, include_assignment_link=True, subject_prefix="Peer Review Reminder")` | `POST /conversations` | Uses `MessageTemplates` |
+| `list_conversations` | `(scope="unread", filter_ids=None, filter_mode="and", include_participants=True, include_all_ids=False)` | `GET /conversations` | — |
+| `get_conversation_details` | `(conversation_id, auto_mark_read=True, include_messages=True)` | `GET /conversations/{id}` | — |
+| `get_unread_count` | `()` | `GET /conversations/unread_count` | — |
+| `mark_conversations_read` | `(conversation_ids)` | `PUT /conversations` | Batch update |
+| `send_bulk_messages_from_list` | `(course_identifier, recipient_data, subject_template, body_template, context_code=None, mode="sync")` | multiple `POST /conversations` | Template interpolation |
+| `send_peer_review_followup_campaign` | `(course_identifier, assignment_id)` | analytics + `POST /conversations` | Chained analytics→messaging pipeline |
+
+## 15. `modules.py` — 8 tools · `register_module_tools`
+
+| Tool | Purpose | Canvas endpoint |
+|------|---------|-----------------|
+| `list_modules` | List course modules | `GET /courses/{id}/modules` |
+| `create_module` | Create module (supports prerequisites) | `POST /courses/{id}/modules` (form data) |
+| `update_module` | Update module settings | `PUT /courses/{id}/modules/{id}` (form data) |
+| `delete_module` | Delete module (items unlinked) | `DELETE /courses/{id}/modules/{id}` |
+| `add_module_item` | Add item (File/Page/Discussion/Assignment/Quiz/SubHeader/ExternalUrl/ExternalTool) | `POST /courses/{id}/modules/{id}/items` |
+| `update_module_item` | Update item, move across modules, completion requirements | `PUT /courses/{id}/modules/{id}/items/{id}` |
+| `list_module_items` | List items with content details | `GET /courses/{id}/modules/{id}/items` |
+| `delete_module_item` | Remove item (content preserved) | `DELETE /courses/{id}/modules/{id}/items/{id}` |
+
+## 16. `pages.py` — 8 tools · `register_page_tools`
+
+| Tool | Purpose | Canvas endpoint |
+|------|---------|-----------------|
+| `list_pages` | List with sort/filter + verbosity | `GET /courses/{id}/pages` |
+| `get_page_content` | Full HTML body | `GET /courses/{id}/pages/{url}` |
+| `get_page_details` | Metadata (dates, editor, status, roles) | `GET /courses/{id}/pages/{url}` |
+| `get_front_page` | Course front page | `GET /courses/{id}/front_page` |
+| `create_page` | Create with body + publish flag | `POST /courses/{id}/pages` |
+| `edit_page_content` | Replace HTML body | `PUT /courses/{id}/pages/{url}` |
+| `update_page_settings` | Publish, front page, editing roles, notify | `PUT /courses/{id}/pages/{url}` |
+| `bulk_update_pages` | Batch settings update | Multiple `PUT` calls |
+
+Editing roles: `teachers / students / members / public`.
+
+## 17. `peer_review_comments.py` — 5 tools · `register_peer_review_comment_tools`
+
+| Tool | Purpose |
+|------|---------|
+| `get_peer_review_comments` | Extract actual comment text (optional anonymize) |
+| `analyze_peer_review_quality` | Quality score + constructiveness + sentiment (via `PeerReviewCommentAnalyzer`) |
+| `identify_problematic_peer_reviews` | Flag low-word-count, generic, harsh, low-quality reviews |
+| `extract_peer_review_dataset` | Export to CSV/JSON (optional local save) |
+| `generate_peer_review_feedback_report` | Markdown instructor report |
+
+## 18. `peer_reviews.py` — 4 tools · `register_peer_review_tools`
+
+| Tool | Purpose |
+|------|---------|
+| `get_peer_review_assignments` | Reviewer→reviewee mapping with completion status |
+| `get_peer_review_completion_analytics` | Per-student breakdown grouped by `none_complete` / `partial_complete` / `all_complete` |
+| `generate_peer_review_report` | Markdown/CSV/JSON report with exec summary, action items, timeline |
+| `get_peer_review_followup_list` | Prioritized follow-up list (urgent / medium / low) with optional contact info |
+
+All wrap `core.peer_reviews.PeerReviewAnalyzer`.
+
+## 19. `quizzes.py` — 13 tools · `register_quiz_tools`
+
+| Tool | Purpose |
+|------|---------|
+| `list_quizzes` | List with optional search |
+| `get_quiz_details` | Full quiz metadata |
+| `create_quiz` | Full settings (unpublished by default) |
+| `update_quiz` | Update settings |
+| `delete_quiz` | Permanent delete |
+| `publish_quiz` / `unpublish_quiz` | Toggle published |
+| `list_quiz_questions` | Questions with previews |
+| `add_quiz_question` | MC/TF/Essay/FITB/Matching/Numerical |
+| `update_quiz_question` | Edit |
+| `delete_quiz_question` | Remove |
+| `get_quiz_statistics` | `GET /courses/{id}/quizzes/{id}/statistics` (submission + per-question analytics) |
+| `list_quiz_submissions` | `GET /courses/{id}/quizzes/{id}/submissions` |
+
+Quiz types: `assignment / practice_quiz / graded_survey / survey`. Allowed attempts: `-1` = unlimited.
+
+## 20. `rubrics.py` — 8 tools · `register_rubric_tools`
+
+| Tool | Canvas endpoint |
+|------|-----------------|
+| `list_assignment_rubrics` | `GET /courses/{id}/assignments/{id}` (include=rubric,rubric_settings) |
+| `get_assignment_rubric_details` | same as above (detailed criteria) |
+| `get_rubric_details` | `GET /courses/{id}/rubrics/{id}` |
+| `list_all_rubrics` | `GET /courses/{id}/rubrics` |
+| `create_rubric` | `POST /courses/{id}/rubrics` — accepts object or array rating format |
+| `update_rubric` | `PUT /courses/{id}/rubrics/{id}` |
+| `delete_rubric` | `DELETE /courses/{id}/rubrics/{id}` |
+| `associate_rubric_with_assignment` | `PUT /courses/{id}/rubrics/{id}` (rubric_association) |
+
+## 21. `rubric_grading.py` — 3 tools · `register_rubric_grading_tools`
+
+| Tool | Canvas endpoint |
+|------|-----------------|
+| `get_submission_rubric_assessment` | `GET /courses/{id}/assignments/{id}/submissions/{id}` (include=rubric_assessment) |
+| `grade_with_rubric` | `PUT /courses/{id}/assignments/{id}/submissions/{id}` (form-encoded rubric_assessment) |
+| `bulk_grade_submissions` | `POST /courses/{id}/assignments/{id}/submissions/update_grades` (bulk); rubric-based grades fall back to per-submission PUT |
+
+Rubric assessment form keys: `rubric_assessment[{criterion_id}][points]`, `[rating_id]`, `[comments]`. Criterion IDs often start with `_` (e.g., `_8027`).
+
+## 22. `search_helpers.py` — 3 tools · `register_search_helper_tools`
+
+| Tool | Canvas endpoint |
+|------|-----------------|
+| `find_assignment` | `GET /courses/{id}/assignments?search_term=X` + client-side fallback |
+| `find_student` | `GET /courses/{id}/users?enrollment_type[]=student&search_term=X` |
+| `find_discussion` | `GET /courses/{id}/discussion_topics` (client-side filter) |
+
+## 23. `student_tools.py` — 5 tools · `register_student_tools` (role-gated)
+
+| Tool | Canvas endpoint |
+|------|-----------------|
+| `get_my_upcoming_assignments` | `GET /users/self/upcoming_events` |
+| `get_my_submission_status` | `GET /courses/{id}/assignments?include[]=submission` |
+| `get_my_course_grades` | `GET /courses?include[]=total_scores,current_grading_period_scores` |
+| `get_my_todo_items` | `GET /users/self/todo` |
+| `get_my_peer_reviews_todo` | `GET /courses/{id}/assignments/{id}/peer_reviews` |
+
+Gated on `CANVAS_MCP_USER_TYPE ∈ {"all", "student"}`. All use `/users/self` only.
+
+---
+
+## Helper Module (not a tool module)
+
+### `message_templates.py` — 0 MCP tools
+
+Exports class `MessageTemplates` with `PEER_REVIEW_TEMPLATES`, `ASSIGNMENT_TEMPLATES`, `DISCUSSION_TEMPLATES`, `GRADE_TEMPLATES`, `GRADING_FEEDBACK_TEMPLATES` and methods:
+- `get_template(category, template_name) → dict`
+- `format_template(template, variables) → dict`
+- `get_formatted_template(category, template_name, variables)`
+- `list_available_templates() → dict`
+- `get_template_variables(category, template_name) → list`
+- `compose_grading_feedback(student_name, assignment_name, total_score, max_total, criterion_feedbacks) → str`
+
+Plus module-level `create_default_variables(student_name, assignment_name, instructor_name=None, course_name=None, **kwargs) → dict`.
+
+Used by: `messaging.py` (peer review reminders / follow-up campaigns).
+
+---
+
+## TypeScript `code_api/` Exports (invoked via `execute_typescript`)
+
+| Function | Input | Canvas endpoint |
+|----------|-------|-----------------|
+| `initializeCanvasClient(apiUrl, apiToken, timeout?)` | — | client init |
+| `listCourses()` | — | `GET /courses` (paginated) |
+| `getCourseDetails({ courseIdentifier })` | — | `GET /courses/{id}` |
+| `listSubmissions({ courseIdentifier, assignmentId, includeUser? })` | — | `GET /courses/{id}/assignments/{id}/submissions` |
+| `sendMessage({ recipients, subject, body, contextCode?, attachmentIds? })` | — | `POST /conversations` |
+| `listDiscussions({ courseIdentifier })` | — | `GET /courses/{id}/discussion_topics` |
+| `postEntry({ courseIdentifier, topicId, message, attachmentIds? })` | — | `POST /courses/{id}/discussion_topics/{id}/entries` |
+| `bulkGradeDiscussion(input)` | initial-post points, peer-review points, peer-review cap, late penalties, dryRun, maxConcurrent | `PUT /courses/{id}/assignments/{id}/submissions/{user_id}` (batch) |
+| `bulkGrade(input)` | `(Submission) => GradeResult \| null` callback, maxConcurrent, rateLimitDelay, dryRun | `PUT` per submission |
+| `gradeWithRubric(input)` | rubric assessment (criterionId → points/ratingId/comments) OR simple grade string | `PUT /courses/{id}/assignments/{id}/submissions/{user_id}` (form-encoded `rubric_assessment[...]`) |
+
+Client helpers: `canvasGet/Post/Put/Delete/PutForm`, `fetchAllPaginated<T>`. Retries 3× at 1/2/4s backoff. Default 30s timeout.
+
+---
+
+## Error Envelope
+
+All tools return JSON strings. Errors are formatted by `core/validation.py::format_error()`:
+
+```json
+{"error": "Human-readable message", "details": "Optional context"}
+```
+
+Use `core/validation.py::is_error_response(parsed_dict)` to detect errors. Tools never raise; they return the envelope.
+
+---
+
+## Canvas Response Anonymization Map
+
+When `ENABLE_DATA_ANONYMIZATION=true`, `core/client.py::_determine_data_type()` dispatches based on endpoint substring:
+
+| Endpoint contains | Data type |
+|-------------------|-----------|
+| `/users`, `/user_*`, `/enrollments` | user |
+| `/submissions`, `/submission_*` | submission |
+| `/assignments` (without `/submissions`) | assignment |
+| `/discussion_topics`, `/entries` | discussion_entry |
+| else | general |
+
+`_should_anonymize_endpoint()` returns `False` for `/courses`, `/accounts`, `/terms`, `/grading_periods` unless the path also contains `/users`. Real user IDs are always preserved for functionality (messaging etc.); only names/emails/SIS IDs/free-text PII are redacted.

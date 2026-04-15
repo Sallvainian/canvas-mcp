@@ -467,6 +467,80 @@ class TestGradingExport:
         assert data["assignments"][0]["submissions"][0]["resubmitted"] is True
 
     @pytest.mark.asyncio
+    async def test_ungraded_or_resubmissions_combined(
+        self, mock_canvas_api, mock_gender_csv
+    ):
+        """When both ungraded_only and resubmissions are True, the filters OR together."""
+        combined_submissions = [
+            {
+                "user_id": 2146,
+                "assignment_id": 12345,
+                "submitted_at": "2026-03-10T10:00:00Z",
+                "workflow_state": "submitted",
+                "score": None,  # ungraded
+                "grade": None,
+                "late": False,
+                "missing": False,
+                "excused": False,
+                "submission_type": "online_upload",
+                "attempt": 1,
+                "graded_at": None,
+            },
+            {
+                "user_id": 2200,
+                "assignment_id": 12345,
+                "submitted_at": "2026-03-14T10:00:00Z",
+                "workflow_state": "graded",
+                "score": 0,
+                "grade": "0",
+                "late": False,
+                "missing": False,
+                "excused": False,
+                "submission_type": "online_upload",
+                "attempt": 2,
+                "graded_at": "2026-03-12T09:00:00Z",  # resubmitted
+            },
+            {
+                "user_id": 2301,
+                "assignment_id": 12345,
+                "submitted_at": "2026-03-10T10:00:00Z",
+                "workflow_state": "graded",
+                "score": 8,
+                "grade": "8",
+                "late": False,
+                "missing": False,
+                "excused": False,
+                "submission_type": "online_upload",
+                "attempt": 1,
+                "graded_at": "2026-03-11T09:00:00Z",  # normal graded, NOT resubmitted
+            },
+        ]
+        mock_canvas_api["fetch_all_paginated_results"].side_effect = [
+            SAMPLE_ASSIGNMENT_GROUPS,
+            SAMPLE_ASSIGNMENTS,
+            SAMPLE_STUDENTS,
+            combined_submissions,
+        ]
+
+        with patch("canvas_mcp.tools.grading_export.GENDER_CSV_BASE", mock_gender_csv):
+            grading_export = get_tool_function("grading_export")
+            result = await grading_export(
+                course="P1",
+                assignment="Genetics L6",
+                ungraded_only=True,
+                resubmissions=True,
+            )
+
+        data = json.loads(result)
+        # Both the ungraded submission and the resubmission should pass;
+        # the normal graded one should not.
+        student_ids = {
+            s["student_id"] for s in data["assignments"][0]["submissions"]
+        }
+        assert student_ids == {2146, 2200}
+        assert data["export_meta"]["total_submissions"] == 2
+
+    @pytest.mark.asyncio
     async def test_submission_state_filter(self, mock_canvas_api, mock_gender_csv):
         """Test filtering by workflow state."""
         mock_canvas_api["fetch_all_paginated_results"].side_effect = [
@@ -604,34 +678,59 @@ class TestGradingExport:
 
     @pytest.mark.asyncio
     async def test_grading_period_filter(self, mock_canvas_api, mock_gender_csv):
-        """Test that grading period filter resolves via API."""
+        """Grading period resolves to date range and filters assignments client-side.
+
+        Also exercises the "Q3" → "Marking Period 3" fuzzy match for Canvas
+        instances that use the latter title format.
+        """
         mock_canvas_api["make_canvas_request"].return_value = {
             "grading_periods": [
                 {
                     "id": 501,
-                    "title": "Q3 - Third Quarter",
-                    "start_date": "2026-01-20",
+                    "title": "Marking Period 3",
+                    "start_date": "2026-03-12",
                     "end_date": "2026-03-28",
                 },
             ]
         }
+        # 12345 due 2026-03-10 (before period start → excluded client-side)
+        # 12346 due 2026-03-15 (inside period → included)
+        submissions_12346 = [
+            {
+                "user_id": 2146,
+                "assignment_id": 12346,
+                "submitted_at": "2026-03-15T14:30:00Z",
+                "workflow_state": "submitted",
+                "score": None,
+                "grade": None,
+                "late": False,
+                "missing": False,
+                "excused": False,
+                "submission_type": "online_upload",
+                "attempt": 1,
+                "graded_at": None,
+            },
+        ]
         mock_canvas_api["fetch_all_paginated_results"].side_effect = [
             SAMPLE_ASSIGNMENT_GROUPS,
-            SAMPLE_ASSIGNMENTS,  # 2 assignments returned
+            SAMPLE_ASSIGNMENTS,
             SAMPLE_STUDENTS,
-            SAMPLE_SUBMISSIONS,  # subs for assignment 12345
-            [],  # subs for assignment 12346
+            submissions_12346,
         ]
 
         with patch("canvas_mcp.tools.grading_export.GENDER_CSV_BASE", mock_gender_csv):
             grading_export = get_tool_function("grading_export")
-            await grading_export(course="P1", grading_period="Q3")
+            result = await grading_export(course="P1", grading_period="Q3")
 
-        # Verify grading_period_id was passed to assignment fetch
+        data = json.loads(result)
+        assignment_ids = [a["assignment_id"] for a in data["assignments"]]
+        assert assignment_ids == [12346]
+
+        # The old server-side grading_period_id param is gone;
+        # filtering now happens locally by due date.
         fetch_calls = mock_canvas_api["fetch_all_paginated_results"].call_args_list
-        # Second call is assignments — check params include grading_period_id
-        assignment_call_params = fetch_calls[1][0][1]  # second positional arg
-        assert assignment_call_params.get("grading_period_id") == 501
+        assignment_call_params = fetch_calls[1][0][1]
+        assert "grading_period_id" not in assignment_call_params
 
     @pytest.mark.asyncio
     async def test_filters_applied_in_metadata(self, mock_canvas_api, mock_gender_csv):
